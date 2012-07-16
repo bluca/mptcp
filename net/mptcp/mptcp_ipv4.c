@@ -457,6 +457,9 @@ void mptcp_init4_subsockets(struct mptcp_cb *mpcb,
 		    ntohs(loc_in.sin_port), &rem_in.sin_addr,
 		    ntohs(rem_in.sin_port));
 
+	/* Adds loose source routing to the socket via IP_OPTION */
+	mptcp_v4_subflow_add_lsrr(mpcp, tp, &sock);
+
 	ret = sock.ops->bind(&sock, (struct sockaddr *)&loc_in, ulid_size);
 	if (ret < 0) {
 		mptcp_debug(KERN_ERR "%s: MPTCP subsocket bind() "
@@ -485,6 +488,61 @@ error:
 	tcp_done(sk);
 	local_bh_enable();
 
+	return;
+}
+
+/*
+ * The list of addresses is parsed each time a new connection is opened, to
+ *  to make sure it's up to date. In case of error, all the lists are
+ *  marked as unavailable and the subflow's fingerprint is set to 0.
+ */
+void mptcp_v4_subflow_add_lsrr(struct mptcp_cb * mpcb, struct tcp_sock * tp,
+		struct socket * sock)
+{
+	int i;
+	char * opt;
+
+	if (mptcp_parse_gateway_list())
+		goto error;
+
+	if (mptcp_update_mpcb_gateway_list(mpcb))
+		goto error;
+
+	for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i)
+		if (mpcb->list_fingerprints.gw_list_avail[i] == 1)
+			break;
+
+	if (i < MPTCP_GATEWAY_MAX_LISTS && gw_list->len[i] > 0) {
+		opt = kmalloc(MAX_IPOPTLEN, GFP_KERNEL);
+		opt[0] = IPOPT_NOP;
+		opt[1] = IPOPT_LSRR;
+		opt[2] = sizeof(gw_list->list[0]) * gw_list->len[i] + 3;
+		opt[3] = IPOPT_MINOFF;
+		memcpy(opt + 4, &gw_list->list[i],
+				sizeof(gw_list->list[0]) * gw_list->len[i]);
+		ret = sock->ops->setsockopt(sock, IPPROTO_IP, IP_OPTIONS, opt,
+				4 + sizeof(gw));
+		if (ret < 0) {
+			mptcp_debug(KERN_ERR "%s: MPTCP subsocket setsockopt() IP_OPTIONS "
+			"failed, error %d\n", __func__, ret);
+			goto error;
+		}
+
+		mpcb->list_fingerprints.gw_list_avail[i] = 0;
+		memcpy(&tp->mptcp->gw_fingerprint,
+				&mpcb->list_fingerprints.gw_list_fingerprint[0],
+				sizeof(u8) * MPTCP_GATEWAY_FP_SIZE);
+		kfree(opt);
+	}
+
+	return;
+
+error:
+	kfree(opt);
+	memset(&tp->mptcp->gw_fingerprint, 0, sizeof(u8) * MPTCP_GATEWAY_FP_SIZE);
+	memset(&mpcb->list_fingerprints.gw_list_avail, 0,
+			sizeof(mpcb->list_fingerprints.gw_list_avail[0])
+			* MPTCP_GATEWAY_MAX_LISTS);
 	return;
 }
 

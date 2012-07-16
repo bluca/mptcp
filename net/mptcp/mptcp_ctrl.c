@@ -73,6 +73,7 @@ int sysctl_mptcp_ndiffports __read_mostly = 1;
 int sysctl_mptcp_enabled __read_mostly = 1;
 int sysctl_mptcp_checksum __read_mostly = 1;
 int sysctl_mptcp_debug __read_mostly = 0;
+char sysctl_mptcp_gateways[MPTCP_GATEWAY_SYSCTL_MAX_LENGTH] __read_mostly;
 EXPORT_SYMBOL(sysctl_mptcp_debug);
 
 static ctl_table mptcp_table[] = {
@@ -110,6 +111,13 @@ static ctl_table mptcp_table[] = {
 		.maxlen = sizeof(int),
 		.mode = 0644,
 		.proc_handler = &proc_dointvec
+	},
+	{
+		.procname = "mptcp_gateways",
+		.data = &sysctl_mptcp_gateways,
+		.maxlen = sizeof(char) * MPTCP_GATEWAY_SYSCTL_MAX_LENGTH,
+		.mode = 0644,
+		.proc_handler = &proc_dostring
 	},
 	{ }
 };
@@ -572,6 +580,150 @@ void mptcp_inherit_sk(struct sock *sk, struct sock *newsk, int family,
 
 	if (newsk->sk_prot->sockets_allocated)
 		percpu_counter_inc(newsk->sk_prot->sockets_allocated);
+}
+
+/* Computes fingerprint of a list of IP addresses (4/16 bytes integers),
+ * used to compare newly parsed sysctl variable with old one.
+ * PAGE_SIZE is hard limit (1024 ipv4 or 256 ipv6 addresses per list) */
+int mptcp_calc_fingerprint_gateway_list(u8 * fingerprint, u8 * data,
+		size_t size)
+{
+	struct scatterlist * sg;
+	struct crypto_hash * tfm;
+	struct hash_desc * desc;
+
+	if (size > PAGE_SIZE)
+		return -1;
+
+	if ((sg = kmalloc(sizeof(struct scatterlist), GFP_KERNEL)) == NULL)
+		return -ENOMEM;
+
+	if ((sg = kmalloc(sizeof(struct hasc_desc), GFP_KERNEL)) == NULL)
+		return -ENOMEM;
+
+	if ((tfm = crypto_alloc_hash("md5", 0, CRYPTO_ALG_ASYNC)) == NULL)
+		return -ENOMEM;
+
+	sg_init_one(sg, (u8 *)data, size);
+
+	desc->tfm = tfm;
+	if ((ret = crypto_hash_init(desc)) != 0)
+		return -1;
+
+	if ((ret = crypto_hash_digest(desc, sg, size, fingerprint)) != 0)
+		return -1;
+
+	crypto_free_hash(tfm);
+	kfree(sg);
+	kfree(desc);
+
+	return 0;
+}
+
+int mptcp_update_mpcb_gateway_list(struct mptcp_cb * mpcb) {
+	int i, j;
+	struct mptcp_gw_list_fps_and_disp * tmp_fprints;
+
+	if ((tmp_fprints = kmalloc(sizeof(struct mptcp_gw_list_fps_and_disp),
+			GFP_KERNEL)) == NULL )
+		return -1;
+
+	memset(&tmp_fprints->gw_list_avail, 1,
+			sizeof(tmp_fprints->gw_list_avail[0]) * MPTCP_GATEWAY_MAX_LISTS);
+
+	for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i)
+		if (gw_list->len[i] > 0)
+			if (mptcp_calc_fingerprint_gateway_list(
+					tmp_fprints->gw_list_fingerprint[i],
+					&(u8 *) gw_list->list[i],
+					sizeof(gw_list->list[i]) * gw_list->len[i])) {
+				kfree(tmp_fprints);
+				return -1;
+			}
+
+	for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i)
+		if (gw_list->len[i] > 0)
+			for (j = 0; j < MPTCP_GATEWAY_MAX_LISTS; ++j)
+				if (!strncmp(&tmp_fprints->gw_list_fingerprint[i],
+						&mpcb->list_fingerprints.gw_list_fingerprint[j],
+						sizeof(u8) * MPTCP_GATEWAY_FP_SIZE)
+					tmp_fprints->gw_list_avail[i] =
+							mpcb->list_fingerprints.gw_list_avail[j];
+
+	memcpy(&mpcb->list_fingerprints, &tmp_fprints,
+			sizeof(struct mptcp_gw_list_fps_and_disp));
+	kfree(tmp_fprints);
+
+	return 0;
+}
+
+/*
+ *  Parses sysctl_mptcp_gateways string for a list of paths to different
+ *  gateways, and stores them for use with the Loose Source Routing (LSRR)
+ *  socket option. Each list must have "," separated addresses, and the lists
+ *  themselves mustbe separated by ";". Returns -1 in case one or more of the
+ *  addresses is not a valid ipv4/6 address.
+ */
+int mptcp_parse_gateway_list()
+{
+	int i, j, k, ret;
+	char * tmp_string;
+
+#if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
+	struct in6_addr tmp_addr;
+	if ((tmp_string = kzalloc(40, GFP_KERNEL)) == NULL)
+		return -1;
+#else
+	struct in_addr tmp_addr;
+	if ((tmp_string = kzalloc(16, GFP_KERNEL)) == NULL)
+		return -1;
+#endif /* CONFIG_IPV6 || CONFIG_IPV6_MODULE */
+
+	memset(gw_list->len, 0, MPTCP_GATEWAY_MAX_LISTS * sizeof(gw_list->len[0]));
+
+	/*
+	 * First condition is a hack, we want to keep working when the termination
+	 * char is founded, but we do not want to read before the array beginning.
+	 * A TMP string is used since inet_pton needs a null terminated string but
+	 * we do not want to modify the sysctl for obvious reasons.
+	 * If a single list is longer than allowed then we overwrite the last ip
+	 * address until the end of the list or of the string is encountered, maybe
+	 * an error should be printed as well?
+	 */
+	for (i = j = k = 0; (i == 0 || sysctl_mptcp_gateways[i - 1] != '\0')
+			&& i < MPTCP_GATEWAY_SYSCTL_MAX_LENGTH
+			&& k < MPTCP_GATEWAY_MAX_LISTS; ++i) {
+		if (sysctl_mptcp_gateways[i] == ';' || sysctl_mptcp_gateways[i] == ','
+				|| sysctl_mptcp_gateways[i] == '\0') {
+			tmp_string[j] = '\0';
+#if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
+			ret = inet_pton(AF_INET6, tmp_string, &tmp_addr);
+#else
+			ret = inet_aton(AF_INET, tmp_string, &tmp_addr);
+#endif /* CONFIG_IPV6 || CONFIG_IPV6_MODULE */
+			if (ret) {
+				memcpy(&gw_list->list[k][gw_list->len[k]], &tmp_addr.s_addr,
+						sizeof(tmp_addr.s_addr));
+				gw_list->len[k]++;
+				j = 0;
+				if (sysctl_mptcp_gateways[i] == ';') {
+					++k;
+				} else if (sysctl_mptcp_gateways[i] != '\0'
+						&& gw_list->len[k] >= MPTCP_GATEWAY_LIST_MAX_LENGTH) {
+					gw_list->len[k]--;
+				}
+			} else {
+				kfree(tmp_string);
+				return -1;
+			}
+		} else {
+			tmp_string[j] = sysctl_mptcp_gateways[i];
+			++j;
+		}
+	}
+	kfree(tmp_string);
+
+	return 0;
 }
 
 int mptcp_alloc_mpcb(struct sock *master_sk, __u64 remote_key)

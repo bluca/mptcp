@@ -149,6 +149,9 @@ struct mptcp_tcp_sock {
 	struct delayed_work work;
 	u32	mptcp_loc_nonce;
 	struct tcp_sock *tp; /* Where is my daddy? */
+
+	/* fprint of the list, to look it up set it available on socket close */
+	u8 gw_fingerprint[MPTCP_GATEWAY_FP_SIZE];
 };
 
 struct multipath_options {
@@ -249,6 +252,11 @@ struct mptcp_cb {
 	u32 path_index_bits;
 	/* Next pi to pick up in case a new path becomes available */
 	u8 next_path_index;
+
+	/* Lists of paths to gateways for LSRR, 0 if unavailabe/1 if available,
+	 * and fingerprints for each list, to check on update from sysctl.
+	 * */
+	struct mptcp_gw_list_fps_and_disp list_fingerprints;
 };
 
 static inline int mptcp_pi_to_flag(int pi)
@@ -548,6 +556,28 @@ extern int sysctl_mptcp_ndiffports;
 extern int sysctl_mptcp_enabled;
 extern int sysctl_mptcp_checksum;
 extern int sysctl_mptcp_debug;
+extern char sysctl_mptcp_gateways[];
+
+#define MPTCP_GATEWAY_SYSCTL_MAX_LENGTH	160
+#define MPTCP_GATEWAY_LIST_MAX_LENGTH	10
+#define MPTCP_GATEWAY_MAX_LISTS	6
+#define MPTCP_GATEWAY_FP_SIZE	16
+
+struct mptcp_gw_list {
+#if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
+	u128 list[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_LIST_MAX_LENGTH];
+#else
+	u32 list[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_LIST_MAX_LENGTH];
+#endif /* CONFIG_IPV6 || CONFIG_IPV6_MODULE */
+	u8 len[MPTCP_GATEWAY_MAX_LISTS];
+};
+
+struct mptcp_gw_list_fps_and_disp {
+	u16 gw_list_fingerprint[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_FP_SIZE];
+	u8 gw_list_avail[MPTCP_GATEWAY_MAX_LISTS];
+};
+
+struct mptcp_gw_list * gw_list;
 
 extern struct workqueue_struct *mptcp_wq;
 
@@ -615,6 +645,10 @@ int mptcp_add_meta_ofo_queue(struct sock *meta_sk, struct sk_buff *skb,
 void mptcp_ofo_queue(struct mptcp_cb *mpcb);
 void mptcp_purge_ofo_queue(struct tcp_sock *meta_tp);
 void mptcp_cleanup_rbuf(struct sock *meta_sk, int copied);
+int mptcp_calc_fingerprint_gateway_list(u8 * fingerprint, u8 * data,
+		size_t size);
+int mptcp_update_mpcb_gateway_list(struct mptcp_cb * mpcb);
+int mptcp_parse_gateway_list();
 int mptcp_alloc_mpcb(struct sock *master_sk, __u64 remote_key);
 int mptcp_add_sock(struct mptcp_cb *mpcb, struct tcp_sock *tp, gfp_t flags);
 void mptcp_del_sock(struct sock *sk);
