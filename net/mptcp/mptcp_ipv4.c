@@ -499,7 +499,7 @@ error:
 void mptcp_v4_subflow_add_lsrr(struct mptcp_cb * mpcb, struct tcp_sock * tp,
 		struct socket * sock)
 {
-	int i;
+	int i, j;
 	char * opt;
 
 	if (mptcp_parse_gateway_list())
@@ -516,12 +516,13 @@ void mptcp_v4_subflow_add_lsrr(struct mptcp_cb * mpcb, struct tcp_sock * tp,
 		opt = kmalloc(MAX_IPOPTLEN, GFP_KERNEL);
 		opt[0] = IPOPT_NOP;
 		opt[1] = IPOPT_LSRR;
-		opt[2] = sizeof(gw_list->list[0]) * gw_list->len[i] + 3;
+		opt[2] = sizeof(gw_list->list[i][0].s_addr) * gw_list->len[i] + 3;
 		opt[3] = IPOPT_MINOFF;
-		memcpy(opt + 4, &gw_list->list[i],
-				sizeof(gw_list->list[0]) * gw_list->len[i]);
+		for (j = 0; j < gw_list->len[i]; ++j)
+			memcpy(opt + 4 + j, &gw_list->list[i][j].s_addr,
+					sizeof(gw_list->list[i][0].s_addr));
 		ret = sock->ops->setsockopt(sock, IPPROTO_IP, IP_OPTIONS, opt,
-				4 + sizeof(gw));
+				4 + sizeof(gw_list->list[i][0].s_addr) * gw_list->len[i]));
 		if (ret < 0) {
 			mptcp_debug(KERN_ERR "%s: MPTCP subsocket setsockopt() IP_OPTIONS "
 			"failed, error %d\n", __func__, ret);

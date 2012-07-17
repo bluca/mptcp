@@ -99,6 +99,26 @@ struct request_sock *rev_mptcp_rsk(const struct mptcp_request_sock *req)
 	return (struct request_sock *)req;
 }
 
+#define MPTCP_GATEWAY_SYSCTL_MAX_LEN	160
+#define MPTCP_GATEWAY_LIST_MAX_LEN	10
+#define MPTCP_GATEWAY_MAX_LISTS	6
+#define MPTCP_GATEWAY_FP_SIZE	16
+
+struct mptcp_gw_list {
+#if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
+	struct in6_addr list6[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_LIST_MAX_LEN];
+#endif /* CONFIG_IPV6 || CONFIG_IPV6_MODULE */
+	struct in_addr list[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_LIST_MAX_LEN];
+	u8 len[MPTCP_GATEWAY_MAX_LISTS];
+};
+
+struct mptcp_gw_list_fps_and_disp {
+	u16 gw_list_fingerprint[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_FP_SIZE];
+	u8 gw_list_avail[MPTCP_GATEWAY_MAX_LISTS];
+};
+
+struct mptcp_gw_list * gw_list;
+
 struct mptcp_tcp_sock {
 	struct tcp_sock	*next;		/* Next subflow socket */
 	 /* Those three fields record the current mapping */
@@ -558,27 +578,6 @@ extern int sysctl_mptcp_checksum;
 extern int sysctl_mptcp_debug;
 extern char sysctl_mptcp_gateways[];
 
-#define MPTCP_GATEWAY_SYSCTL_MAX_LENGTH	160
-#define MPTCP_GATEWAY_LIST_MAX_LENGTH	10
-#define MPTCP_GATEWAY_MAX_LISTS	6
-#define MPTCP_GATEWAY_FP_SIZE	16
-
-struct mptcp_gw_list {
-#if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
-	u128 list[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_LIST_MAX_LENGTH];
-#else
-	u32 list[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_LIST_MAX_LENGTH];
-#endif /* CONFIG_IPV6 || CONFIG_IPV6_MODULE */
-	u8 len[MPTCP_GATEWAY_MAX_LISTS];
-};
-
-struct mptcp_gw_list_fps_and_disp {
-	u16 gw_list_fingerprint[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_FP_SIZE];
-	u8 gw_list_avail[MPTCP_GATEWAY_MAX_LISTS];
-};
-
-struct mptcp_gw_list * gw_list;
-
 extern struct workqueue_struct *mptcp_wq;
 
 #define mptcp_debug(fmt, args...)					\
@@ -648,7 +647,7 @@ void mptcp_cleanup_rbuf(struct sock *meta_sk, int copied);
 int mptcp_calc_fingerprint_gateway_list(u8 * fingerprint, u8 * data,
 		size_t size);
 int mptcp_update_mpcb_gateway_list(struct mptcp_cb * mpcb);
-int mptcp_parse_gateway_list();
+int mptcp_parse_gateway_list(void);
 int mptcp_alloc_mpcb(struct sock *master_sk, __u64 remote_key);
 int mptcp_add_sock(struct mptcp_cb *mpcb, struct tcp_sock *tp, gfp_t flags);
 void mptcp_del_sock(struct sock *sk);

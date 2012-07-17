@@ -73,7 +73,7 @@ int sysctl_mptcp_ndiffports __read_mostly = 1;
 int sysctl_mptcp_enabled __read_mostly = 1;
 int sysctl_mptcp_checksum __read_mostly = 1;
 int sysctl_mptcp_debug __read_mostly = 0;
-char sysctl_mptcp_gateways[MPTCP_GATEWAY_SYSCTL_MAX_LENGTH] __read_mostly;
+char sysctl_mptcp_gateways[MPTCP_GATEWAY_SYSCTL_MAX_LEN] __read_mostly;
 EXPORT_SYMBOL(sysctl_mptcp_debug);
 
 static ctl_table mptcp_table[] = {
@@ -115,7 +115,7 @@ static ctl_table mptcp_table[] = {
 	{
 		.procname = "mptcp_gateways",
 		.data = &sysctl_mptcp_gateways,
-		.maxlen = sizeof(char) * MPTCP_GATEWAY_SYSCTL_MAX_LENGTH,
+		.maxlen = sizeof(char) * MPTCP_GATEWAY_SYSCTL_MAX_LEN,
 		.mode = 0644,
 		.proc_handler = &proc_dostring
 	},
@@ -590,7 +590,7 @@ int mptcp_calc_fingerprint_gateway_list(u8 * fingerprint, u8 * data,
 {
 	struct scatterlist * sg;
 	struct crypto_hash * tfm;
-	struct hash_desc * desc;
+	struct hash_desc desc;
 
 	if (size > PAGE_SIZE)
 		return -1;
@@ -598,24 +598,24 @@ int mptcp_calc_fingerprint_gateway_list(u8 * fingerprint, u8 * data,
 	if ((sg = kmalloc(sizeof(struct scatterlist), GFP_KERNEL)) == NULL)
 		return -ENOMEM;
 
-	if ((sg = kmalloc(sizeof(struct hasc_desc), GFP_KERNEL)) == NULL)
-		return -ENOMEM;
+	//if ((sg = kmalloc(sizeof(struct hasc_desc), GFP_KERNEL)) == NULL)
+	//	return -ENOMEM;
 
 	if ((tfm = crypto_alloc_hash("md5", 0, CRYPTO_ALG_ASYNC)) == NULL)
 		return -ENOMEM;
 
 	sg_init_one(sg, (u8 *)data, size);
 
-	desc->tfm = tfm;
-	if ((ret = crypto_hash_init(desc)) != 0)
+	desc.tfm = tfm;
+	if (crypto_hash_init(&desc) != 0)
 		return -1;
 
-	if ((ret = crypto_hash_digest(desc, sg, size, fingerprint)) != 0)
+	if (crypto_hash_digest(&desc, sg, size, fingerprint) != 0)
 		return -1;
 
 	crypto_free_hash(tfm);
 	kfree(sg);
-	kfree(desc);
+	//kfree(desc);
 
 	return 0;
 }
@@ -635,8 +635,8 @@ int mptcp_update_mpcb_gateway_list(struct mptcp_cb * mpcb) {
 		if (gw_list->len[i] > 0)
 			if (mptcp_calc_fingerprint_gateway_list(
 					tmp_fprints->gw_list_fingerprint[i],
-					&(u8 *) gw_list->list[i],
-					sizeof(gw_list->list[i]) * gw_list->len[i])) {
+					(u8 *)gw_list->list[i][0],
+					sizeof(gw_list->list[i][0].s_addr) * gw_list->len[i])) {
 				kfree(tmp_fprints);
 				return -1;
 			}
@@ -664,12 +664,12 @@ int mptcp_update_mpcb_gateway_list(struct mptcp_cb * mpcb) {
  *  themselves mustbe separated by ";". Returns -1 in case one or more of the
  *  addresses is not a valid ipv4/6 address.
  */
-int mptcp_parse_gateway_list()
+int mptcp_parse_gateway_list(void)
 {
 	int i, j, k, ret;
 	char * tmp_string;
 
-#if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
+#if IS_ENABLED(CONFIG_IPV6)
 	struct in6_addr tmp_addr;
 	if ((tmp_string = kzalloc(40, GFP_KERNEL)) == NULL)
 		return -1;
@@ -677,7 +677,7 @@ int mptcp_parse_gateway_list()
 	struct in_addr tmp_addr;
 	if ((tmp_string = kzalloc(16, GFP_KERNEL)) == NULL)
 		return -1;
-#endif /* CONFIG_IPV6 || CONFIG_IPV6_MODULE */
+#endif /* CONFIG_IPV6 */
 
 	memset(gw_list->len, 0, MPTCP_GATEWAY_MAX_LISTS * sizeof(gw_list->len[0]));
 
@@ -691,25 +691,30 @@ int mptcp_parse_gateway_list()
 	 * an error should be printed as well?
 	 */
 	for (i = j = k = 0; (i == 0 || sysctl_mptcp_gateways[i - 1] != '\0')
-			&& i < MPTCP_GATEWAY_SYSCTL_MAX_LENGTH
+			&& i < MPTCP_GATEWAY_SYSCTL_MAX_LEN
 			&& k < MPTCP_GATEWAY_MAX_LISTS; ++i) {
 		if (sysctl_mptcp_gateways[i] == ';' || sysctl_mptcp_gateways[i] == ','
 				|| sysctl_mptcp_gateways[i] == '\0') {
 			tmp_string[j] = '\0';
-#if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
+#if IS_ENABLED(CONFIG_IPV6)
 			ret = inet_pton(AF_INET6, tmp_string, &tmp_addr);
 #else
 			ret = inet_aton(AF_INET, tmp_string, &tmp_addr);
-#endif /* CONFIG_IPV6 || CONFIG_IPV6_MODULE */
+#endif /* CONFIG_IPV6 */
 			if (ret) {
-				memcpy(&gw_list->list[k][gw_list->len[k]], &tmp_addr.s_addr,
+#if IS_ENABLED(CONFIG_IPV6)
+				memcpy(&gw_list->list6[k][gw_list->len[k]].s6_addr, &tmp_addr.s_addr,
 						sizeof(tmp_addr.s_addr));
+#else
+				memcpy(&gw_list->list[k][gw_list->len[k]].s_addr, &tmp_addr.s_addr,
+						sizeof(tmp_addr.s_addr));
+#endif /* CONFIG_IPV6 */
 				gw_list->len[k]++;
 				j = 0;
 				if (sysctl_mptcp_gateways[i] == ';') {
 					++k;
 				} else if (sysctl_mptcp_gateways[i] != '\0'
-						&& gw_list->len[k] >= MPTCP_GATEWAY_LIST_MAX_LENGTH) {
+						&& gw_list->len[k] >= MPTCP_GATEWAY_LIST_MAX_LEN) {
 					gw_list->len[k]--;
 				}
 			} else {
