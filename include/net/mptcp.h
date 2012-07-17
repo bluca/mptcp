@@ -117,7 +117,7 @@ struct mptcp_gw_list_fps_and_disp {
 	u8 gw_list_avail[MPTCP_GATEWAY_MAX_LISTS];
 };
 
-struct mptcp_gw_list * gw_list;
+struct mptcp_gw_list * mp_gw_list;
 
 struct mptcp_tcp_sock {
 	struct tcp_sock	*next;		/* Next subflow socket */
