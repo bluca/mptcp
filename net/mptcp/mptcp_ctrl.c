@@ -142,6 +142,8 @@ static ctl_table mptcp_root_table[] = {
 };
 #endif
 
+struct mptcp_gw_list * mptcp_gws;
+
 struct sock *mptcp_select_ack_sock(const struct mptcp_cb *mpcb, int copied)
 {
 	struct sock *sk, *subsk = NULL;
@@ -634,8 +636,8 @@ int mptcp_update_mpcb_gateway_list(struct mptcp_cb * mpcb) {
 	for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i)
 		if (mptcp_gws->len[i] > 0)
 			if (mptcp_calc_fingerprint_gateway_list(
-					tmp_fprints->gw_list_fingerprint[i],
-					(u8 *)mptcp_gws->list[i][0],
+					(u8 *)&tmp_fprints->gw_list_fingerprint[i],
+					(u8 *)&mptcp_gws->list[i][0],
 					sizeof(mptcp_gws->list[i][0].s_addr) * mptcp_gws->len[i])) {
 				kfree(tmp_fprints);
 				return -1;
@@ -644,9 +646,9 @@ int mptcp_update_mpcb_gateway_list(struct mptcp_cb * mpcb) {
 	for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i)
 		if (mptcp_gws->len[i] > 0)
 			for (j = 0; j < MPTCP_GATEWAY_MAX_LISTS; ++j)
-				if (!strncmp(&tmp_fprints->gw_list_fingerprint[i],
-						&mpcb->list_fingerprints.gw_list_fingerprint[j],
-						sizeof(u8) * MPTCP_GATEWAY_FP_SIZE)
+				if (!strncmp((char *)&tmp_fprints->gw_list_fingerprint[i],
+						(char *)&mpcb->list_fingerprints.gw_list_fingerprint[j],
+						sizeof(u8) * MPTCP_GATEWAY_FP_SIZE))
 					tmp_fprints->gw_list_avail[i] =
 							mpcb->list_fingerprints.gw_list_avail[j];
 
@@ -697,14 +699,16 @@ int mptcp_parse_gateway_list(void)
 				|| sysctl_mptcp_gateways[i] == '\0') {
 			tmp_string[j] = '\0';
 #if IS_ENABLED(CONFIG_IPV6)
-			ret = inet_pton(AF_INET6, tmp_string, &tmp_addr);
+			/*ret = inet_pton(AF_INET6, tmp_string, &tmp_addr);*/
+			ret = in6_pton(tmp_string, strlen(tmp_string), (u8 *) &tmp_addr.s6_addr, '\0', NULL);
 #else
-			ret = inet_aton(AF_INET, tmp_string, &tmp_addr);
+			/*ret = inet_pton(AF_INET, tmp_string, &tmp_addr);*/
+			ret = in4_pton(tmp_string, strlen(tmp_string), (u8 *) &tmp_addr.s_addr, '\0', NULL);
 #endif /* CONFIG_IPV6 */
 			if (ret) {
 #if IS_ENABLED(CONFIG_IPV6)
-				memcpy(&mptcp_gws->list6[k][mptcp_gws->len[k]].s6_addr, &tmp_addr.s_addr,
-						sizeof(tmp_addr.s_addr));
+				memcpy(&mptcp_gws->list6[k][mptcp_gws->len[k]].s6_addr, &tmp_addr.s6_addr,
+						sizeof(tmp_addr.s6_addr));
 #else
 				memcpy(&mptcp_gws->list[k][mptcp_gws->len[k]].s_addr, &tmp_addr.s_addr,
 						sizeof(tmp_addr.s_addr));

@@ -458,7 +458,7 @@ void mptcp_init4_subsockets(struct mptcp_cb *mpcb,
 		    ntohs(rem_in.sin_port));
 
 	/* Adds loose source routing to the socket via IP_OPTION */
-	mptcp_v4_subflow_add_lsrr(mpcp, tp, &sock);
+	mptcp_v4_subflow_add_lsrr(mpcb, tp, &sock);
 
 	ret = sock.ops->bind(&sock, (struct sockaddr *)&loc_in, ulid_size);
 	if (ret < 0) {
@@ -499,7 +499,7 @@ error:
 void mptcp_v4_subflow_add_lsrr(struct mptcp_cb * mpcb, struct tcp_sock * tp,
 		struct socket * sock)
 {
-	int i, j;
+	int i, j, ret;
 	char * opt;
 
 	if (mptcp_parse_gateway_list())
@@ -522,10 +522,11 @@ void mptcp_v4_subflow_add_lsrr(struct mptcp_cb * mpcb, struct tcp_sock * tp,
 			memcpy(opt + 4 + j, &mptcp_gws->list[i][j].s_addr,
 					sizeof(mptcp_gws->list[i][0].s_addr));
 		ret = sock->ops->setsockopt(sock, IPPROTO_IP, IP_OPTIONS, opt,
-				4 + sizeof(mptcp_gws->list[i][0].s_addr) * mptcp_gws->len[i]));
+				4 + sizeof(mptcp_gws->list[i][0].s_addr) * mptcp_gws->len[i]);
 		if (ret < 0) {
 			mptcp_debug(KERN_ERR "%s: MPTCP subsocket setsockopt() IP_OPTIONS "
 			"failed, error %d\n", __func__, ret);
+			kfree(opt);
 			goto error;
 		}
 
@@ -539,7 +540,6 @@ void mptcp_v4_subflow_add_lsrr(struct mptcp_cb * mpcb, struct tcp_sock * tp,
 	return;
 
 error:
-	kfree(opt);
 	memset(&tp->mptcp->gw_fingerprint, 0, sizeof(u8) * MPTCP_GATEWAY_FP_SIZE);
 	memset(&mpcb->list_fingerprints.gw_list_avail, 0,
 			sizeof(mpcb->list_fingerprints.gw_list_avail[0])
