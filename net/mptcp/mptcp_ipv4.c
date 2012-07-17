@@ -512,17 +512,17 @@ void mptcp_v4_subflow_add_lsrr(struct mptcp_cb * mpcb, struct tcp_sock * tp,
 		if (mpcb->list_fingerprints.gw_list_avail[i] == 1)
 			break;
 
-	if (i < MPTCP_GATEWAY_MAX_LISTS && mp_gw_list->len[i] > 0) {
+	if (i < MPTCP_GATEWAY_MAX_LISTS && mptcp_gws->len[i] > 0) {
 		opt = kmalloc(MAX_IPOPTLEN, GFP_KERNEL);
 		opt[0] = IPOPT_NOP;
 		opt[1] = IPOPT_LSRR;
-		opt[2] = sizeof(mp_gw_list->list[i][0].s_addr) * mp_gw_list->len[i] + 3;
+		opt[2] = sizeof(mptcp_gws->list[i][0].s_addr) * mptcp_gws->len[i] + 3;
 		opt[3] = IPOPT_MINOFF;
-		for (j = 0; j < mp_gw_list->len[i]; ++j)
-			memcpy(opt + 4 + j, &mp_gw_list->list[i][j].s_addr,
-					sizeof(mp_gw_list->list[i][0].s_addr));
+		for (j = 0; j < mptcp_gws->len[i]; ++j)
+			memcpy(opt + 4 + j, &mptcp_gws->list[i][j].s_addr,
+					sizeof(mptcp_gws->list[i][0].s_addr));
 		ret = sock->ops->setsockopt(sock, IPPROTO_IP, IP_OPTIONS, opt,
-				4 + sizeof(mp_gw_list->list[i][0].s_addr) * mp_gw_list->len[i]));
+				4 + sizeof(mptcp_gws->list[i][0].s_addr) * mptcp_gws->len[i]));
 		if (ret < 0) {
 			mptcp_debug(KERN_ERR "%s: MPTCP subsocket setsockopt() IP_OPTIONS "
 			"failed, error %d\n", __func__, ret);

@@ -105,9 +105,9 @@ struct request_sock *rev_mptcp_rsk(const struct mptcp_request_sock *req)
 #define MPTCP_GATEWAY_FP_SIZE	16
 
 struct mptcp_gw_list {
-#if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
+#if IS_ENABLED(CONFIG_IPV6)
 	struct in6_addr list6[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_LIST_MAX_LEN];
-#endif /* CONFIG_IPV6 || CONFIG_IPV6_MODULE */
+#endif /* CONFIG_IPV6 */
 	struct in_addr list[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_LIST_MAX_LEN];
 	u8 len[MPTCP_GATEWAY_MAX_LISTS];
 };
@@ -117,7 +117,7 @@ struct mptcp_gw_list_fps_and_disp {
 	u8 gw_list_avail[MPTCP_GATEWAY_MAX_LISTS];
 };
 
-struct mptcp_gw_list * mp_gw_list;
+struct mptcp_gw_list * mptcp_gws;
 
 struct mptcp_tcp_sock {
 	struct tcp_sock	*next;		/* Next subflow socket */

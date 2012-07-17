@@ -632,17 +632,17 @@ int mptcp_update_mpcb_gateway_list(struct mptcp_cb * mpcb) {
 			sizeof(tmp_fprints->gw_list_avail[0]) * MPTCP_GATEWAY_MAX_LISTS);
 
 	for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i)
-		if (mp_gw_list->len[i] > 0)
+		if (mptcp_gws->len[i] > 0)
 			if (mptcp_calc_fingerprint_gateway_list(
 					tmp_fprints->gw_list_fingerprint[i],
-					(u8 *)mp_gw_list->list[i][0],
-					sizeof(mp_gw_list->list[i][0].s_addr) * mp_gw_list->len[i])) {
+					(u8 *)mptcp_gws->list[i][0],
+					sizeof(mptcp_gws->list[i][0].s_addr) * mptcp_gws->len[i])) {
 				kfree(tmp_fprints);
 				return -1;
 			}
 
 	for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i)
-		if (mp_gw_list->len[i] > 0)
+		if (mptcp_gws->len[i] > 0)
 			for (j = 0; j < MPTCP_GATEWAY_MAX_LISTS; ++j)
 				if (!strncmp(&tmp_fprints->gw_list_fingerprint[i],
 						&mpcb->list_fingerprints.gw_list_fingerprint[j],
@@ -679,7 +679,7 @@ int mptcp_parse_gateway_list(void)
 		return -1;
 #endif /* CONFIG_IPV6 */
 
-	memset(mp_gw_list->len, 0, MPTCP_GATEWAY_MAX_LISTS * sizeof(mp_gw_list->len[0]));
+	memset(mptcp_gws->len, 0, MPTCP_GATEWAY_MAX_LISTS * sizeof(mptcp_gws->len[0]));
 
 	/*
 	 * First condition is a hack, we want to keep working when the termination
@@ -703,19 +703,19 @@ int mptcp_parse_gateway_list(void)
 #endif /* CONFIG_IPV6 */
 			if (ret) {
 #if IS_ENABLED(CONFIG_IPV6)
-				memcpy(&mp_gw_list->list6[k][mp_gw_list->len[k]].s6_addr, &tmp_addr.s_addr,
+				memcpy(&mptcp_gws->list6[k][mptcp_gws->len[k]].s6_addr, &tmp_addr.s_addr,
 						sizeof(tmp_addr.s_addr));
 #else
-				memcpy(&mp_gw_list->list[k][mp_gw_list->len[k]].s_addr, &tmp_addr.s_addr,
+				memcpy(&mptcp_gws->list[k][mptcp_gws->len[k]].s_addr, &tmp_addr.s_addr,
 						sizeof(tmp_addr.s_addr));
 #endif /* CONFIG_IPV6 */
-				mp_gw_list->len[k]++;
+				mptcp_gws->len[k]++;
 				j = 0;
 				if (sysctl_mptcp_gateways[i] == ';') {
 					++k;
 				} else if (sysctl_mptcp_gateways[i] != '\0'
-						&& mp_gw_list->len[k] >= MPTCP_GATEWAY_LIST_MAX_LEN) {
-					mp_gw_list->len[k]--;
+						&& mptcp_gws->len[k] >= MPTCP_GATEWAY_LIST_MAX_LEN) {
+					mptcp_gws->len[k]--;
 				}
 			} else {
 				kfree(tmp_string);
