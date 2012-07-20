@@ -458,7 +458,8 @@ void mptcp_init4_subsockets(struct mptcp_cb *mpcb,
 		    ntohs(rem_in.sin_port));
 
 	/* Adds loose source routing to the socket via IP_OPTION */
-	mptcp_v4_subflow_add_lsrr(mpcb, tp, &sock);
+	if (sysctl_mptcp_ndiffports > 1)
+		mptcp_v4_subflow_add_lsrr(mpcb, tp, &sock);
 
 	ret = sock.ops->bind(&sock, (struct sockaddr *)&loc_in, ulid_size);
 	if (ret < 0) {
