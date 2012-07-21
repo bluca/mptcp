@@ -714,7 +714,7 @@ int mptcp_parse_gateway_list(void)
 						ret, (unsigned long)tmp_addr.s_addr);
 #if IS_ENABLED(CONFIG_IPV6)
 				memcpy(&mptcp_gws->list6[k][mptcp_gws->len[k]].s6_addr,
-						&tmp6_addr.s6_addr, sizeof(tmp_addr.s6_addr));
+						&tmp6_addr.s6_addr, sizeof(tmp6_addr.s6_addr));
 #else
 				memcpy(&mptcp_gws->list[k][mptcp_gws->len[k]].s_addr,
 						&tmp_addr.s_addr, sizeof(tmp_addr.s_addr));
