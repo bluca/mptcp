@@ -698,20 +698,26 @@ int mptcp_parse_gateway_list(void)
 		if (sysctl_mptcp_gateways[i] == ';' || sysctl_mptcp_gateways[i] == ','
 				|| sysctl_mptcp_gateways[i] == '\0') {
 			tmp_string[j] = '\0';
+			mptcp_debug("mptcp_parse_gateway_list tmp: %s i: %d \n",
+					tmp_string, i);
 #if IS_ENABLED(CONFIG_IPV6)
 			/*ret = inet_pton(AF_INET6, tmp_string, &tmp_addr);*/
-			ret = in6_pton(tmp_string, strlen(tmp_string), (u8 *) &tmp_addr.s6_addr, '\0', NULL);
+			ret = in6_pton(tmp_string, strlen(tmp_string),
+					(u8 *) &tmp_addr.s6_addr, '\0', NULL);
 #else
 			/*ret = inet_pton(AF_INET, tmp_string, &tmp_addr);*/
-			ret = in4_pton(tmp_string, strlen(tmp_string), (u8 *) &tmp_addr.s_addr, '\0', NULL);
+			ret = in4_pton(tmp_string, strlen(tmp_string),
+					(u8 *) &tmp_addr.s_addr, '\0', NULL);
 #endif /* CONFIG_IPV6 */
 			if (ret) {
+				mptcp_debug("mptcp_parse_gateway_list ret: %d s_addr: %lu\n",
+						ret, tmp_addr.s_addr);
 #if IS_ENABLED(CONFIG_IPV6)
-				memcpy(&mptcp_gws->list6[k][mptcp_gws->len[k]].s6_addr, &tmp_addr.s6_addr,
-						sizeof(tmp_addr.s6_addr));
+				memcpy(&mptcp_gws->list6[k][mptcp_gws->len[k]].s6_addr,
+						&tmp_addr.s6_addr, sizeof(tmp_addr.s6_addr));
 #else
-				memcpy(&mptcp_gws->list[k][mptcp_gws->len[k]].s_addr, &tmp_addr.s_addr,
-						sizeof(tmp_addr.s_addr));
+				memcpy(&mptcp_gws->list[k][mptcp_gws->len[k]].s_addr,
+						&tmp_addr.s_addr, sizeof(tmp_addr.s_addr));
 #endif /* CONFIG_IPV6 */
 				mptcp_gws->len[k]++;
 				j = 0;
@@ -721,6 +727,8 @@ int mptcp_parse_gateway_list(void)
 						&& mptcp_gws->len[k] >= MPTCP_GATEWAY_LIST_MAX_LEN) {
 					mptcp_gws->len[k]--;
 				}
+				mptcp_debug("mptcp_parse_gateway_list k %d len list[k]: %lu\n",
+						k, mptcp_gws->list[k][mptcp_gws->len[k]].s_addr);
 			} else {
 				kfree(tmp_string);
 				return -1;
