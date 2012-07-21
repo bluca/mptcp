@@ -648,7 +648,7 @@ int mptcp_update_mpcb_gateway_list(struct mptcp_cb * mpcb) {
 			for (j = 0; j < MPTCP_GATEWAY_MAX_LISTS; ++j)
 				if (!strncmp((char *)&tmp_fprints->gw_list_fingerprint[i],
 						(char *)&mpcb->list_fingerprints.gw_list_fingerprint[j],
-						sizeof(u8) * MPTCP_GATEWAY_FP_SIZE))
+						sizeof(u16) * MPTCP_GATEWAY_FP_SIZE))
 					tmp_fprints->gw_list_avail[i] =
 							mpcb->list_fingerprints.gw_list_avail[j];
 
