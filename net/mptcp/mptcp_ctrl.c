@@ -670,13 +670,13 @@ int mptcp_parse_gateway_list(void)
 {
 	int i, j, k, ret;
 	char * tmp_string;
+	struct in_addr tmp_addr;
 
 #if IS_ENABLED(CONFIG_IPV6)
 	struct in6_addr tmp6_addr;
 	if ((tmp_string = kzalloc(40, GFP_KERNEL)) == NULL)
 		return -1;
 #else
-	struct in_addr tmp_addr;
 	if ((tmp_string = kzalloc(16, GFP_KERNEL)) == NULL)
 		return -1;
 #endif /* CONFIG_IPV6 */
