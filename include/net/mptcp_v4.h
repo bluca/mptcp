@@ -57,6 +57,7 @@ void mptcp_init4_subsockets(struct mptcp_cb *mpcb,
 			    struct mptcp_rem4 *rem);
 void mptcp_v4_subflow_add_lsrr(struct mptcp_cb * mpcb, struct tcp_sock * tp,
 		struct socket * sock);
+int mptcp_parse_gateway_ipv4(void);
 void mptcp_pm_addr4_event_handler(struct in_ifaddr *ifa, unsigned long event,
 				  struct mptcp_cb *mpcb);
 void mptcp_pm_v4_init(void);

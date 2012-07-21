@@ -647,7 +647,6 @@ void mptcp_cleanup_rbuf(struct sock *meta_sk, int copied);
 int mptcp_calc_fingerprint_gateway_list(u8 * fingerprint, u8 * data,
 		size_t size);
 int mptcp_update_mpcb_gateway_list(struct mptcp_cb * mpcb);
-int mptcp_parse_gateway_list(void);
 int mptcp_alloc_mpcb(struct sock *master_sk, __u64 remote_key);
 int mptcp_add_sock(struct mptcp_cb *mpcb, struct tcp_sock *tp, gfp_t flags);
 void mptcp_del_sock(struct sock *sk);

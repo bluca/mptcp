@@ -503,7 +503,7 @@ void mptcp_v4_subflow_add_lsrr(struct mptcp_cb * mpcb, struct tcp_sock * tp,
 	int i, j, ret;
 	char * opt;
 
-	if (mptcp_parse_gateway_list())
+	if (mptcp_parse_gateway_ipv4())
 		goto error;
 
 	if (mptcp_update_mpcb_gateway_list(mpcb))
@@ -546,6 +546,75 @@ error:
 			sizeof(mpcb->list_fingerprints.gw_list_avail[0])
 			* MPTCP_GATEWAY_MAX_LISTS);
 	return;
+}
+
+/*
+ *  Parses sysctl_mptcp_gateways string for a list of paths to different
+ *  gateways, and stores them for use with the Loose Source Routing (LSRR)
+ *  socket option. Each list must have "," separated addresses, and the lists
+ *  themselves mustbe separated by ";". Returns -1 in case one or more of the
+ *  addresses is not a valid ipv4/6 address.
+ */
+int mptcp_parse_gateway_ipv4(void)
+{
+	int i, j, k, ret;
+	char * tmp_string;
+	struct in_addr tmp_addr;
+
+	if ((tmp_string = kzalloc(16, GFP_KERNEL)) == NULL)
+		return -1;
+
+	memset(mptcp_gws->len, 0, MPTCP_GATEWAY_MAX_LISTS * sizeof(mptcp_gws->len[0]));
+
+	/*
+	 * First condition is a hack, we want to keep working when the termination
+	 * char is founded, but we do not want to read before the array beginning.
+	 * A TMP string is used since inet_pton needs a null terminated string but
+	 * we do not want to modify the sysctl for obvious reasons.
+	 * If a single list is longer than allowed then we overwrite the last ip
+	 * address until the end of the list or of the string is encountered, maybe
+	 * an error should be printed as well?
+	 */
+	for (i = j = k = 0; (i == 0 || sysctl_mptcp_gateways[i - 1] != '\0')
+			&& i < MPTCP_GATEWAY_SYSCTL_MAX_LEN
+			&& k < MPTCP_GATEWAY_MAX_LISTS; ++i) {
+		if (sysctl_mptcp_gateways[i] == ';' || sysctl_mptcp_gateways[i] == ','
+				|| sysctl_mptcp_gateways[i] == '\0') {
+			tmp_string[j] = '\0';
+			mptcp_debug("mptcp_parse_gateway_list tmp: %s i: %d \n",
+					tmp_string, i);
+
+			/*ret = inet_pton(AF_INET, tmp_string, &tmp_addr);*/
+			ret = in4_pton(tmp_string, strlen(tmp_string),
+					(u8 *) &tmp_addr.s_addr, '\0', NULL);
+
+			if (ret) {
+				mptcp_debug("mptcp_parse_gateway_list ret: %d s_addr: %lu\n",
+						ret, (unsigned long)tmp_addr.s_addr);
+				memcpy(&mptcp_gws->list[k][mptcp_gws->len[k]].s_addr,
+						&tmp_addr.s_addr, sizeof(tmp_addr.s_addr));
+				mptcp_gws->len[k]++;
+				j = 0;
+				if (sysctl_mptcp_gateways[i] == ';') {
+					++k;
+				} else if (sysctl_mptcp_gateways[i] != '\0'
+						&& mptcp_gws->len[k] >= MPTCP_GATEWAY_LIST_MAX_LEN) {
+					mptcp_gws->len[k]--;
+				}
+				mptcp_debug("mptcp_parse_gateway_list k %d len list[k]: %lu\n",
+						k, (unsigned long)mptcp_gws->list[k][mptcp_gws->len[k]].s_addr);
+			} else {
+				kfree(tmp_string);
+				return -1;
+			}
+		} else {
+			tmp_string[j] = sysctl_mptcp_gateways[i];
+			++j;
+		}
+	}
+	kfree(tmp_string);
+
+	return 0;
 }
 
 /****** IPv4-Address event handler ******/
