@@ -672,7 +672,7 @@ int mptcp_parse_gateway_list(void)
 	char * tmp_string;
 
 #if IS_ENABLED(CONFIG_IPV6)
-	struct in6_addr tmp_addr;
+	struct in6_addr tmp6_addr;
 	if ((tmp_string = kzalloc(40, GFP_KERNEL)) == NULL)
 		return -1;
 #else
@@ -703,7 +703,7 @@ int mptcp_parse_gateway_list(void)
 #if IS_ENABLED(CONFIG_IPV6)
 			/*ret = inet_pton(AF_INET6, tmp_string, &tmp_addr);*/
 			ret = in6_pton(tmp_string, strlen(tmp_string),
-					(u8 *) &tmp_addr.s6_addr, '\0', NULL);
+					(u8 *) &tmp6_addr.s6_addr, '\0', NULL);
 #else
 			/*ret = inet_pton(AF_INET, tmp_string, &tmp_addr);*/
 			ret = in4_pton(tmp_string, strlen(tmp_string),
@@ -711,10 +711,10 @@ int mptcp_parse_gateway_list(void)
 #endif /* CONFIG_IPV6 */
 			if (ret) {
 				mptcp_debug("mptcp_parse_gateway_list ret: %d s_addr: %lu\n",
-						ret, tmp_addr.s_addr);
+						ret, (unsigned long)tmp_addr.s_addr);
 #if IS_ENABLED(CONFIG_IPV6)
 				memcpy(&mptcp_gws->list6[k][mptcp_gws->len[k]].s6_addr,
-						&tmp_addr.s6_addr, sizeof(tmp_addr.s6_addr));
+						&tmp6_addr.s6_addr, sizeof(tmp_addr.s6_addr));
 #else
 				memcpy(&mptcp_gws->list[k][mptcp_gws->len[k]].s_addr,
 						&tmp_addr.s_addr, sizeof(tmp_addr.s_addr));
@@ -728,7 +728,7 @@ int mptcp_parse_gateway_list(void)
 					mptcp_gws->len[k]--;
 				}
 				mptcp_debug("mptcp_parse_gateway_list k %d len list[k]: %lu\n",
-						k, mptcp_gws->list[k][mptcp_gws->len[k]].s_addr);
+						k, (unsigned long)mptcp_gws->list[k][mptcp_gws->len[k]].s_addr);
 			} else {
 				kfree(tmp_string);
 				return -1;
