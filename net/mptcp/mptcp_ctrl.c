@@ -626,12 +626,9 @@ int mptcp_update_mpcb_gateway_list(struct mptcp_cb * mpcb) {
 	int i, j;
 	struct mptcp_gw_list_fps_and_disp * tmp_fprints;
 
-	if ((tmp_fprints = kmalloc(sizeof(struct mptcp_gw_list_fps_and_disp),
+	if ((tmp_fprints = kzalloc(sizeof(struct mptcp_gw_list_fps_and_disp),
 			GFP_KERNEL)) == NULL )
 		return -1;
-
-	memset(&tmp_fprints->gw_list_avail, 0,
-			sizeof(tmp_fprints->gw_list_avail[0]) * MPTCP_GATEWAY_MAX_LISTS);
 
 	for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i)
 		if (mptcp_gws->len[i] > 0)
@@ -648,8 +645,8 @@ int mptcp_update_mpcb_gateway_list(struct mptcp_cb * mpcb) {
 	for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i)
 		if (mptcp_gws->len[i] > 0)
 			for (j = 0; j < MPTCP_GATEWAY_MAX_LISTS; ++j)
-				if (!strncmp((char *)&tmp_fprints->gw_list_fingerprint[i],
-						(char *)&mpcb->list_fingerprints.gw_list_fingerprint[j],
+				if (!memcmp(&tmp_fprints->gw_list_fingerprint[i],
+						&mpcb->list_fingerprints.gw_list_fingerprint[j],
 						sizeof(u8) * MPTCP_GATEWAY_FP_SIZE))
 					tmp_fprints->gw_list_avail[i] =
 							mpcb->list_fingerprints.gw_list_avail[j];

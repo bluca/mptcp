@@ -564,8 +564,7 @@ int mptcp_parse_gateway_ipv4(void)
 	if ((tmp_string = kzalloc(16, GFP_KERNEL)) == NULL)
 		return -1;
 
-	memset(mptcp_gws->len, 0, MPTCP_GATEWAY_MAX_LISTS
-			* sizeof(mptcp_gws->len[0]));
+	memset(mptcp_gws->len, 0, MPTCP_GATEWAY_MAX_LISTS * sizeof(u8));
 
 	/*
 	 * First condition is a hack, we want to keep working when the termination
