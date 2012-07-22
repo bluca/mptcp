@@ -630,7 +630,7 @@ int mptcp_update_mpcb_gateway_list(struct mptcp_cb * mpcb) {
 			GFP_KERNEL)) == NULL )
 		return -1;
 
-	memset(&tmp_fprints->gw_list_avail, 1,
+	memset(&tmp_fprints->gw_list_avail, 0,
 			sizeof(tmp_fprints->gw_list_avail[0]) * MPTCP_GATEWAY_MAX_LISTS);
 
 	for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i)
@@ -641,6 +641,8 @@ int mptcp_update_mpcb_gateway_list(struct mptcp_cb * mpcb) {
 					sizeof(mptcp_gws->list[i][0].s_addr) * mptcp_gws->len[i])) {
 				kfree(tmp_fprints);
 				return -1;
+			} else {
+				tmp_fprints->gw_list_avail[i] = 1;
 			}
 
 	for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i)
