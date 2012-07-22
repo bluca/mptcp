@@ -564,7 +564,8 @@ int mptcp_parse_gateway_ipv4(void)
 	if ((tmp_string = kzalloc(16, GFP_KERNEL)) == NULL)
 		return -1;
 
-	memset(mptcp_gws->len, 0, MPTCP_GATEWAY_MAX_LISTS * sizeof(mptcp_gws->len[0]));
+	memset(mptcp_gws->len, 0, MPTCP_GATEWAY_MAX_LISTS
+			* sizeof(mptcp_gws->len[0]));
 
 	/*
 	 * First condition is a hack, we want to keep working when the termination
@@ -575,11 +576,11 @@ int mptcp_parse_gateway_ipv4(void)
 	 * address until the end of the list or of the string is encountered, maybe
 	 * an error should be printed as well?
 	 */
-	for (i = j = k = 0; (i == 0 || sysctl_mptcp_gateways[i - 1] != '\0')
+	for (i = j = k = 0; sysctl_mptcp_gateways[i] != '\0'
 			&& i < MPTCP_GATEWAY_SYSCTL_MAX_LEN
 			&& k < MPTCP_GATEWAY_MAX_LISTS; ++i) {
-		if (sysctl_mptcp_gateways[i] == ';' || sysctl_mptcp_gateways[i] == ','
-				|| sysctl_mptcp_gateways[i] == '\0') {
+		if (sysctl_mptcp_gateways[i] == ';'
+				|| sysctl_mptcp_gateways[i] == ',') {
 			tmp_string[j] = '\0';
 			mptcp_debug("mptcp_parse_gateway_list tmp: %s i: %d \n",
 					tmp_string, i);
@@ -601,8 +602,6 @@ int mptcp_parse_gateway_ipv4(void)
 						&& mptcp_gws->len[k] >= MPTCP_GATEWAY_LIST_MAX_LEN) {
 					mptcp_gws->len[k]--;
 				}
-				mptcp_debug("mptcp_parse_gateway_list k %d len list[k]: %lu\n",
-						k, (unsigned long)mptcp_gws->list[k][mptcp_gws->len[k]].s_addr);
 			} else {
 				kfree(tmp_string);
 				return -1;
