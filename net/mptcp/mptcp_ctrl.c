@@ -648,7 +648,7 @@ int mptcp_update_mpcb_gateway_list(struct mptcp_cb * mpcb) {
 			for (j = 0; j < MPTCP_GATEWAY_MAX_LISTS; ++j)
 				if (!strncmp((char *)&tmp_fprints->gw_list_fingerprint[i],
 						(char *)&mpcb->list_fingerprints.gw_list_fingerprint[j],
-						sizeof(u16) * MPTCP_GATEWAY_FP_SIZE))
+						sizeof(u8) * MPTCP_GATEWAY_FP_SIZE))
 					tmp_fprints->gw_list_avail[i] =
 							mpcb->list_fingerprints.gw_list_avail[j];
 
@@ -775,6 +775,9 @@ int mptcp_alloc_mpcb(struct sock *master_sk, __u64 remote_key)
 
 	mptcp_debug("%s: created mpcb with token %#x\n",
 		    __func__, mpcb->mptcp_loc_token);
+
+	memset(&mpcb->list_fingerprints, 0,
+			sizeof(struct mptcp_gw_list_fps_and_disp));
 
 	return 0;
 }

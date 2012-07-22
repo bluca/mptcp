@@ -113,7 +113,7 @@ struct mptcp_gw_list {
 };
 
 struct mptcp_gw_list_fps_and_disp {
-	u16 gw_list_fingerprint[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_FP_SIZE];
+	u8 gw_list_fingerprint[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_FP_SIZE];
 	u8 gw_list_avail[MPTCP_GATEWAY_MAX_LISTS];
 };
 
