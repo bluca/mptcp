@@ -1606,6 +1606,9 @@ static int __init mptcp_init(void)
 #ifdef CONFIG_SYSCTL
 	register_sysctl_table(mptcp_root_table);
 #endif
+	if ((mptcp_gws = kzalloc(sizeof(struct mptcp_gw_list), GFP_KERNEL))
+			== NULL)
+		return -ENOMEM;
 	mptcp_sock_cache = kmem_cache_create("mptcp_sock",
 					     sizeof(struct mptcp_tcp_sock),
 					     0, SLAB_HWCACHE_ALIGN|SLAB_PANIC,
