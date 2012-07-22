@@ -651,7 +651,7 @@ int mptcp_update_mpcb_gateway_list(struct mptcp_cb * mpcb) {
 					tmp_fprints->gw_list_avail[i] =
 							mpcb->list_fingerprints.gw_list_avail[j];
 
-	memcpy(&mpcb->list_fingerprints, &tmp_fprints,
+	memcpy(&mpcb->list_fingerprints, tmp_fprints,
 			sizeof(struct mptcp_gw_list_fps_and_disp));
 	kfree(tmp_fprints);
 
