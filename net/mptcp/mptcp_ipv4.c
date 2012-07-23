@@ -557,8 +557,8 @@ error:
  *  Parses sysctl_mptcp_gateways string for a list of paths to different
  *  gateways, and stores them for use with the Loose Source Routing (LSRR)
  *  socket option. Each list must have "," separated addresses, and the lists
- *  themselves mustbe separated by ";". Returns -1 in case one or more of the
- *  addresses is not a valid ipv4/6 address.
+ *  themselves must be separated by "!". Returns -1 in case one or more of the
+ *  addresses is not a valid ipv4/6 address. Sysctl string must end in '!'.
  */
 int mptcp_parse_gateway_ipv4(void)
 {
@@ -583,7 +583,7 @@ int mptcp_parse_gateway_ipv4(void)
 	for (i = j = k = 0; sysctl_mptcp_gateways[i] != '\0'
 			&& i < MPTCP_GATEWAY_SYSCTL_MAX_LEN
 			&& k < MPTCP_GATEWAY_MAX_LISTS; ++i) {
-		if (sysctl_mptcp_gateways[i] == ';'
+		if (sysctl_mptcp_gateways[i] == '!'
 				|| sysctl_mptcp_gateways[i] == ',') {
 			tmp_string[j] = '\0';
 			mptcp_debug("mptcp_parse_gateway_list tmp: %s i: %d \n",
@@ -600,7 +600,7 @@ int mptcp_parse_gateway_ipv4(void)
 						&tmp_addr.s_addr, sizeof(tmp_addr.s_addr));
 				mptcp_gws->len[k]++;
 				j = 0;
-				if (sysctl_mptcp_gateways[i] == ';') {
+				if (sysctl_mptcp_gateways[i] == '!') {
 					++k;
 				} else if (sysctl_mptcp_gateways[i] != '\0'
 						&& mptcp_gws->len[k] >= MPTCP_GATEWAY_LIST_MAX_LEN) {
