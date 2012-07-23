@@ -459,7 +459,7 @@ void mptcp_init4_subsockets(struct mptcp_cb *mpcb,
 
 	/* Adds loose source routing to the socket via IP_OPTION */
 	if (sysctl_mptcp_ndiffports > 1)
-		mptcp_v4_subflow_add_lsrr(mpcb, tp, &sock);
+		mptcp_v4_subflow_add_lsrr(mpcb, tp, &sock, rem->addr);
 
 	ret = sock.ops->bind(&sock, (struct sockaddr *)&loc_in, ulid_size);
 	if (ret < 0) {
@@ -498,7 +498,7 @@ error:
  *  marked as unavailable and the subflow's fingerprint is set to 0.
  */
 void mptcp_v4_subflow_add_lsrr(struct mptcp_cb * mpcb, struct tcp_sock * tp,
-		struct socket * sock)
+		struct socket * sock, struct in_addr rem)
 {
 	int i, j, ret;
 	char * opt;
@@ -517,13 +517,18 @@ void mptcp_v4_subflow_add_lsrr(struct mptcp_cb * mpcb, struct tcp_sock * tp,
 		opt = kmalloc(MAX_IPOPTLEN, GFP_KERNEL);
 		opt[0] = IPOPT_NOP;
 		opt[1] = IPOPT_LSRR;
-		opt[2] = sizeof(mptcp_gws->list[i][0].s_addr) * mptcp_gws->len[i] + 3;
+		opt[2] = sizeof(mptcp_gws->list[i][0].s_addr) * (mptcp_gws->len[i] + 1)
+				+ 3;
 		opt[3] = IPOPT_MINOFF;
 		for (j = 0; j < mptcp_gws->len[i]; ++j)
 			memcpy(opt + 4 + j, &mptcp_gws->list[i][j].s_addr,
 					sizeof(mptcp_gws->list[i][0].s_addr));
+		/* Final destination must be part of IP_OPTIONS parameter. */
+		memcpy(opt + 4 + j, &rem.s_addr, sizeof(rem.s_addr));
+
 		ret = sock->ops->setsockopt(sock, IPPROTO_IP, IP_OPTIONS, opt,
-				4 + sizeof(mptcp_gws->list[i][0].s_addr) * mptcp_gws->len[i]);
+				4 + sizeof(mptcp_gws->list[i][0].s_addr)
+				* (mptcp_gws->len[i] + 1));
 		if (ret < 0) {
 			mptcp_debug(KERN_ERR "%s: MPTCP subsocket setsockopt() IP_OPTIONS "
 			"failed, error %d\n", __func__, ret);
