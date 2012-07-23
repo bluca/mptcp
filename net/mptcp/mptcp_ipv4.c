@@ -521,10 +521,12 @@ void mptcp_v4_subflow_add_lsrr(struct mptcp_cb * mpcb, struct tcp_sock * tp,
 				+ 3;
 		opt[3] = IPOPT_MINOFF;
 		for (j = 0; j < mptcp_gws->len[i]; ++j)
-			memcpy(opt + 4 + j, &mptcp_gws->list[i][j].s_addr,
+			memcpy(opt + 4 + (j * sizeof(mptcp_gws->list[i][0].s_addr)),
+					&mptcp_gws->list[i][j].s_addr,
 					sizeof(mptcp_gws->list[i][0].s_addr));
 		/* Final destination must be part of IP_OPTIONS parameter. */
-		memcpy(opt + 4 + j, &rem.s_addr, sizeof(rem.s_addr));
+		memcpy(opt + 4 + (j * sizeof(rem.s_addr)), &rem.s_addr,
+				sizeof(rem.s_addr));
 
 		ret = sock->ops->setsockopt(sock, IPPROTO_IP, IP_OPTIONS, opt,
 				4 + sizeof(mptcp_gws->list[i][0].s_addr)
