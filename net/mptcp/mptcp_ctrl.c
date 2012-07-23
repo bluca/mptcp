@@ -631,7 +631,7 @@ int mptcp_update_mpcb_gateway_list(struct mptcp_cb * mpcb) {
 		return -1;
 
 	for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i)
-		if (mptcp_gws->len[i] > 0)
+		if (mptcp_gws->len[i] > 0) {
 			if (mptcp_calc_fingerprint_gateway_list(
 					(u8 *)&tmp_fprints->gw_list_fingerprint[i],
 					(u8 *)&mptcp_gws->list[i][0],
@@ -641,7 +641,7 @@ int mptcp_update_mpcb_gateway_list(struct mptcp_cb * mpcb) {
 			} else {
 				tmp_fprints->gw_list_avail[i] = 1;
 			}
-
+		}
 	for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i)
 		if (mptcp_gws->len[i] > 0)
 			for (j = 0; j < MPTCP_GATEWAY_MAX_LISTS; ++j)
