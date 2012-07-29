@@ -457,9 +457,9 @@ void mptcp_init4_subsockets(struct mptcp_cb *mpcb,
 		    ntohs(loc_in.sin_port), &rem_in.sin_addr,
 		    ntohs(rem_in.sin_port));
 
-	/* Adds loose source routing to the socket via IP_OPTION */
+	/* Adds loose source routing to the socket via IP_OPTION
 	if (sysctl_mptcp_ndiffports > 1)
-		mptcp_v4_subflow_add_lsrr(mpcb, tp, &sock, rem->addr);
+		mptcp_v4_subflow_add_lsrr(mpcb, tp, &sock, rem->addr);*/
 
 	ret = sock.ops->bind(&sock, (struct sockaddr *)&loc_in, ulid_size);
 	if (ret < 0) {
@@ -495,10 +495,10 @@ error:
 /*
  * The list of addresses is parsed each time a new connection is opened, to
  *  to make sure it's up to date. In case of error, all the lists are
- *  marked as unavailable and the subflow's fingerprint is set to 0.
+ *  marked as unavailable and the socket's fingerprint is set to 0.
  */
-void mptcp_v4_subflow_add_lsrr(struct mptcp_cb * mpcb, struct tcp_sock * tp,
-		struct socket * sock, struct in_addr rem)
+void mptcp_v4_add_lsrr(struct mptcp_cb * mpcb, struct tcp_sock * tp,
+		struct sock * sock, struct in_addr rem)
 {
 	int i, j, ret;
 	char * opt;
@@ -528,7 +528,7 @@ void mptcp_v4_subflow_add_lsrr(struct mptcp_cb * mpcb, struct tcp_sock * tp,
 		memcpy(opt + 4 + (j * sizeof(rem.s_addr)), &rem.s_addr,
 				sizeof(rem.s_addr));
 
-		ret = sock->ops->setsockopt(sock, IPPROTO_IP, IP_OPTIONS, opt,
+		ret = tcp_setsockopt(sock, IPPROTO_IP, IP_OPTIONS, opt,
 				4 + sizeof(mptcp_gws->list[i][0].s_addr)
 				* (mptcp_gws->len[i] + 1));
 		if (ret < 0) {

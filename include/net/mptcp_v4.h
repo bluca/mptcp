@@ -55,7 +55,7 @@ struct request_sock *mptcp_v4_search_req(const __be16 rport,
 void mptcp_init4_subsockets(struct mptcp_cb *mpcb,
 			    const struct mptcp_loc4 *loc,
 			    struct mptcp_rem4 *rem);
-void mptcp_v4_subflow_add_lsrr(struct mptcp_cb * mpcb, struct tcp_sock * tp,
+void mptcp_v4_add_lsrr(struct mptcp_cb * mpcb, struct tcp_sock * tp,
 		struct socket * sock, struct in_addr rem);
 int mptcp_parse_gateway_ipv4(void);
 void mptcp_pm_addr4_event_handler(struct in_ifaddr *ifa, unsigned long event,
