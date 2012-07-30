@@ -163,14 +163,6 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 	if (usin->sin_family != AF_INET)
 		return -EAFNOSUPPORT;
-	/*
-	 * Adds loose source routing to the socket via IP_OPTION to MPTCP
-	 */
-#if defined(CONFIG_MPTCP)
-	if (sysctl_mptcp_enabled == 1 && sysctl_mptcp_ndiffports > 1)
-		mptcp_v4_add_lsrr(mpcb_from_tcpsock(tp), tp, sock,
-				usin->sin_addr);
-#endif
 
 	nexthop = daddr = usin->sin_addr.s_addr;
 	inet_opt = rcu_dereference_protected(inet->inet_opt,
