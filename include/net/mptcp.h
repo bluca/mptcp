@@ -32,6 +32,7 @@
 
 #include <linux/inetdevice.h>
 #include <linux/ipv6.h>
+#include <linux/jiffies.h>
 #include <linux/list.h>
 #include <linux/net.h>
 #include <linux/skbuff.h>
@@ -109,10 +110,13 @@ struct mptcp_gw_list {
 	struct in6_addr list6[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_LIST_MAX_LEN];
 #endif /* CONFIG_IPV6 */
 	struct in_addr list[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_LIST_MAX_LEN];
+	u64 timestamp;
+	u8 gw_list_fingerprint[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_FP_SIZE];
 	u8 len[MPTCP_GATEWAY_MAX_LISTS];
 };
 
 struct mptcp_gw_list_fps_and_disp {
+	u64 timestamp;
 	u8 gw_list_fingerprint[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_FP_SIZE];
 	u8 gw_list_avail[MPTCP_GATEWAY_MAX_LISTS];
 };
@@ -172,6 +176,7 @@ struct mptcp_tcp_sock {
 
 	/* fprint of the list, to look it up set it available on socket close */
 	u8 gw_fingerprint[MPTCP_GATEWAY_FP_SIZE];
+	u8 gw_is_set;
 };
 
 struct multipath_options {

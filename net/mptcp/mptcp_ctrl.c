@@ -76,6 +76,36 @@ int sysctl_mptcp_debug __read_mostly = 0;
 char sysctl_mptcp_gateways[MPTCP_GATEWAY_SYSCTL_MAX_LEN] __read_mostly;
 EXPORT_SYMBOL(sysctl_mptcp_debug);
 
+/*
+ * Callback functions, executed when syctl mptcp.mptcp_gateways is updated.
+ * Inspired from proc_tcp_congestion_control().
+ */
+static int proc_mptcp_gateways(ctl_table *ctl, int write,
+				       void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	int ret;
+	ctl_table tbl = {
+		.maxlen = MPTCP_GATEWAY_SYSCTL_MAX_LEN,
+	};
+
+	if (write) {
+		if ((tbl.data = kzalloc(MPTCP_GATEWAY_SYSCTL_MAX_LEN, GFP_KERNEL))
+				== NULL)
+			return -1;
+		ret = proc_dostring(&tbl, write, buffer, lenp, ppos);
+		if (ret == 0) {
+			ret = mptcp_parse_gateway_ipv4(tbl.data);
+			memcpy(ctl->data, tbl.data, MPTCP_GATEWAY_SYSCTL_MAX_LEN);
+		}
+		kfree(tbl.data);
+	} else {
+		ret = proc_dostring(ctl, write, buffer, lenp, ppos);
+	}
+
+
+	return ret;
+}
+
 static ctl_table mptcp_table[] = {
 	{
 		.procname = "mptcp_mss",
@@ -117,7 +147,7 @@ static ctl_table mptcp_table[] = {
 		.data = &sysctl_mptcp_gateways,
 		.maxlen = sizeof(char) * MPTCP_GATEWAY_SYSCTL_MAX_LEN,
 		.mode = 0644,
-		.proc_handler = &proc_dostring
+		.proc_handler = &proc_mptcp_gateways
 	},
 	{ }
 };
@@ -624,38 +654,54 @@ int mptcp_calc_fingerprint_gateway_list(u8 * fingerprint, u8 * data,
 
 int mptcp_update_mpcb_gateway_list(struct mptcp_cb * mpcb) {
 	int i, j;
-	struct mptcp_gw_list_fps_and_disp * tmp_fprints;
+	u8 * tmp_avail, * tmp_used;
 
-	if ((tmp_fprints = kzalloc(sizeof(struct mptcp_gw_list_fps_and_disp),
-			GFP_KERNEL)) == NULL )
-		return -1;
+	if (mpcb->list_fingerprints.timestamp >= mptcp_gws->timestamp)
+		return 0;
 
+	if ((tmp_avail = kzalloc(sizeof(u8) * MPTCP_GATEWAY_MAX_LISTS,
+			GFP_KERNEL)) == NULL)
+		goto error;
+	if ((tmp_used = kzalloc(sizeof(u8) * MPTCP_GATEWAY_MAX_LISTS,
+			GFP_KERNEL)) == NULL)
+		goto error;
+
+	/*
+	 * tmp_used: if any two lists are exactly equivalent then their fingerprint
+	 * is also equivalent. This means that, without remembering which has
+	 * already been seet, the following code would be broken, as only the first
+	 * old value of gw_list_avail would be written on both the new variables.
+	 */
 	for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i)
 		if (mptcp_gws->len[i] > 0) {
-			if (mptcp_calc_fingerprint_gateway_list(
-					(u8 *)&tmp_fprints->gw_list_fingerprint[i],
-					(u8 *)&mptcp_gws->list[i][0],
-					sizeof(mptcp_gws->list[i][0].s_addr) * mptcp_gws->len[i])) {
-				kfree(tmp_fprints);
-				return -1;
-			} else {
-				tmp_fprints->gw_list_avail[i] = 1;
-			}
-		}
-	for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i)
-		if (mptcp_gws->len[i] > 0)
+			tmp_avail[i] = 1;
 			for (j = 0; j < MPTCP_GATEWAY_MAX_LISTS; ++j)
-				if (!memcmp(&tmp_fprints->gw_list_fingerprint[i],
+				if (!memcmp(&mptcp_gws->gw_list_fingerprint[i],
 						&mpcb->list_fingerprints.gw_list_fingerprint[j],
-						sizeof(u8) * MPTCP_GATEWAY_FP_SIZE))
-					tmp_fprints->gw_list_avail[i] =
-							mpcb->list_fingerprints.gw_list_avail[j];
+						sizeof(u8) * MPTCP_GATEWAY_FP_SIZE) && !tmp_used[j]) {
+					tmp_avail[i] = mpcb->list_fingerprints.gw_list_avail[j];
+					tmp_used[j] = 1;
+					break;
+				}
+		}
 
-	memcpy(&mpcb->list_fingerprints, tmp_fprints,
+	memcpy(&mpcb->list_fingerprints.gw_list_fingerprint,
+			&mptcp_gws->gw_list_fingerprint,
 			sizeof(struct mptcp_gw_list_fps_and_disp));
-	kfree(tmp_fprints);
+	memcpy(&mpcb->list_fingerprints.gw_list_avail, tmp_avail,
+			sizeof(u8)* MPTCP_GATEWAY_MAX_LISTS);
+	mpcb->list_fingerprints.timestamp = mptcp_gws->timestamp;
+	kfree(tmp_avail);
+	kfree(tmp_used);
 
 	return 0;
+
+error:
+	kfree(tmp_avail);
+	kfree(tmp_used);
+	memset(&mpcb->list_fingerprints, 0,
+			sizeof(struct mptcp_gw_list_fps_and_disp));
+	return -1;
 }
 
 int mptcp_alloc_mpcb(struct sock *master_sk, __u64 remote_key)
@@ -897,7 +943,7 @@ void mptcp_del_sock(struct sock *sk)
 {
 	struct tcp_sock *tp = tcp_sk(sk), *tp_prev;
 	struct mptcp_cb *mpcb;
-	int done = 0;
+	int i, done = 0;
 
 	if (!tp->mptcp || !tp->mptcp->attached)
 		return;
@@ -908,6 +954,20 @@ void mptcp_del_sock(struct sock *sk)
 	mptcp_debug("%s: Removing subsock tok %#x pi:%d state %d is_meta? %d\n",
 		    __func__, mpcb->mptcp_loc_token, tp->mptcp->path_index,
 		    sk->sk_state, is_meta_sk(sk));
+
+	/*
+	 * Sets the used path to GW as available again. We check if the match was
+	 * actually claimed in case there are duplicates.
+	 */
+	if (tp->mptcp->gw_is_set == 1)
+		for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i)
+			if (mpcb->list_fingerprints.gw_list_avail[i] == 0
+					&& !memcmp(&tp->mptcp->gw_fingerprint,
+					&mpcb->list_fingerprints.gw_list_fingerprint[i],
+					sizeof(u8) * MPTCP_GATEWAY_FP_SIZE)) {
+				mpcb->list_fingerprints.gw_list_avail[i] = 1;
+				break;
+			}
 
 	if (tp_prev == tp) {
 		mpcb->connection_list = tp->mptcp->next;

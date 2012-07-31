@@ -503,11 +503,8 @@ void mptcp_v4_subflow_add_lsrr(struct mptcp_cb * mpcb, struct tcp_sock * tp,
 	int i, j, ret;
 	char * opt;
 
-	if (mptcp_parse_gateway_ipv4())
-		goto error;
-
 	if (mptcp_update_mpcb_gateway_list(mpcb))
-		goto error;
+		return;
 
 	for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i)
 		if (mpcb->list_fingerprints.gw_list_avail[i] == 1)
@@ -535,43 +532,37 @@ void mptcp_v4_subflow_add_lsrr(struct mptcp_cb * mpcb, struct tcp_sock * tp,
 			mptcp_debug(KERN_ERR "%s: MPTCP subsocket setsockopt() IP_OPTIONS "
 			"failed, error %d\n", __func__, ret);
 			kfree(opt);
-			goto error;
+			return;
 		}
 
 		mpcb->list_fingerprints.gw_list_avail[i] = 0;
 		memcpy(&tp->mptcp->gw_fingerprint,
 				&mpcb->list_fingerprints.gw_list_fingerprint[0],
 				sizeof(u8) * MPTCP_GATEWAY_FP_SIZE);
+		tp->mptcp->gw_is_set = 1;
 		kfree(opt);
 	}
 
 	return;
-
-error:
-	memset(&tp->mptcp->gw_fingerprint, 0, sizeof(u8) * MPTCP_GATEWAY_FP_SIZE);
-	memset(&mpcb->list_fingerprints.gw_list_avail, 0,
-			sizeof(mpcb->list_fingerprints.gw_list_avail[0])
-			* MPTCP_GATEWAY_MAX_LISTS);
-	return;
 }
 
 /*
- *  Parses sysctl_mptcp_gateways string for a list of paths to different
+ *  Parses gateways string for a list of paths to different
  *  gateways, and stores them for use with the Loose Source Routing (LSRR)
  *  socket option. Each list must have "," separated addresses, and the lists
  *  themselves must be separated by "-". Returns -1 in case one or more of the
  *  addresses is not a valid ipv4/6 address. Sysctl string must end in '-'.
  */
-int mptcp_parse_gateway_ipv4(void)
+int mptcp_parse_gateway_ipv4(char * gateways)
 {
 	int i, j, k, ret;
 	char * tmp_string;
 	struct in_addr tmp_addr;
 
 	if ((tmp_string = kzalloc(16, GFP_KERNEL)) == NULL)
-		return -1;
+		goto error;
 
-	memset(mptcp_gws->len, 0, MPTCP_GATEWAY_MAX_LISTS * sizeof(u8));
+	memset(mptcp_gws, 0, sizeof(struct mptcp_gw_list));
 
 	/*
 	 * First condition is a hack, we want to keep working when the termination
@@ -582,11 +573,9 @@ int mptcp_parse_gateway_ipv4(void)
 	 * address until the end of the list or of the string is encountered, maybe
 	 * an error should be printed as well?
 	 */
-	for (i = j = k = 0; sysctl_mptcp_gateways[i] != '\0'
-			&& i < MPTCP_GATEWAY_SYSCTL_MAX_LEN
+	for (i = j = k = 0; gateways[i] != '\0' && i < MPTCP_GATEWAY_SYSCTL_MAX_LEN
 			&& k < MPTCP_GATEWAY_MAX_LISTS; ++i) {
-		if (sysctl_mptcp_gateways[i] == '-'
-				|| sysctl_mptcp_gateways[i] == ',') {
+		if (gateways[i] == '-' || gateways[i] == ',') {
 			tmp_string[j] = '\0';
 			mptcp_debug("mptcp_parse_gateway_list tmp: %s i: %d \n",
 					tmp_string, i);
@@ -602,24 +591,36 @@ int mptcp_parse_gateway_ipv4(void)
 						&tmp_addr.s_addr, sizeof(tmp_addr.s_addr));
 				mptcp_gws->len[k]++;
 				j = 0;
-				if (sysctl_mptcp_gateways[i] == '-') {
+				if (gateways[i] == '-') {
+					if (mptcp_calc_fingerprint_gateway_list(
+							(u8 *)&mptcp_gws->gw_list_fingerprint[k],
+							(u8 *)&mptcp_gws->list[k][0],
+							sizeof(mptcp_gws->list[k][0].s_addr) * mptcp_gws->len[k])) {
+						goto error;
+					}
 					++k;
-				} else if (sysctl_mptcp_gateways[i] != '\0'
+				} else if (gateways[i] != '\0'
 						&& mptcp_gws->len[k] >= MPTCP_GATEWAY_LIST_MAX_LEN) {
 					mptcp_gws->len[k]--;
 				}
 			} else {
-				kfree(tmp_string);
-				return -1;
+				goto error;
 			}
 		} else {
-			tmp_string[j] = sysctl_mptcp_gateways[i];
+			tmp_string[j] = gateways[i];
 			++j;
 		}
 	}
+
+	mptcp_gws->timestamp = get_jiffies_64();
 	kfree(tmp_string);
 
 	return 0;
+
+error:
+	kfree(tmp_string);
+	memset(mptcp_gws, 0, sizeof(struct mptcp_gw_list));
+	return -1;
 }
 
 /****** IPv4-Address event handler ******/
