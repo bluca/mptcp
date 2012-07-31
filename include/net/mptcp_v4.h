@@ -41,6 +41,7 @@
 extern struct request_sock_ops mptcp_request_sock_ops;
 extern struct proto mptcp_prot;
 extern struct mptcp_gw_list * mptcp_gws;
+extern rwlock_t mptcp_gws_lock;
 
 #ifdef CONFIG_MPTCP
 

@@ -125,6 +125,7 @@ struct mptcp_gw_list_fps_and_disp {
 };
 
 extern struct mptcp_gw_list * mptcp_gws;
+extern rwlock_t mptcp_gws_lock;
 
 struct mptcp_tcp_sock {
 	struct tcp_sock	*next;		/* Next subflow socket */

@@ -510,8 +510,10 @@ error:
 int mptcp_parse_gateway_ipv6(char * gateways)
 {
 	int i, j, k, ret;
-	char * tmp_string;
+	char * tmp_string = NULL;
 	struct in6_addr tmp_addr;
+
+	write_lock(&mptcp_gws_lock);
 
 	if ((tmp_string = kzalloc(40, GFP_KERNEL)) == NULL)
 		goto error;
@@ -569,12 +571,13 @@ int mptcp_parse_gateway_ipv6(char * gateways)
 
 	mptcp_gws->timestamp = get_jiffies_64();
 	kfree(tmp_string);
-
+	write_unlock(&mptcp_gws_lock);
 	return 0;
 
 error:
 	kfree(tmp_string);
 	memset(mptcp_gws, 0, sizeof(struct mptcp_gw_list));
+	write_unlock(&mptcp_gws_lock);
 	return -1;
 }
 

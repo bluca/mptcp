@@ -501,10 +501,12 @@ void mptcp_v4_add_lsrr(struct mptcp_cb * mpcb, struct tcp_sock * tp,
 		struct socket * sock, struct in_addr rem)
 {
 	int i, j, ret;
-	char * opt;
+	char * opt = NULL;
+
+	read_lock(&mptcp_gws_lock);
 
 	if (mptcp_update_mpcb_gateway_list(mpcb))
-		return;
+		goto error;
 
 	for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i)
 		if (mpcb->list_fingerprints.gw_list_avail[i] == 1)
@@ -531,8 +533,7 @@ void mptcp_v4_add_lsrr(struct mptcp_cb * mpcb, struct tcp_sock * tp,
 		if (ret < 0) {
 			mptcp_debug(KERN_ERR "%s: MPTCP subsocket setsockopt() IP_OPTIONS "
 			"failed, error %d\n", __func__, ret);
-			kfree(opt);
-			return;
+			goto error;
 		}
 
 		mpcb->list_fingerprints.gw_list_avail[i] = 0;
@@ -543,6 +544,12 @@ void mptcp_v4_add_lsrr(struct mptcp_cb * mpcb, struct tcp_sock * tp,
 		kfree(opt);
 	}
 
+	read_unlock(&mptcp_gws_lock);
+	return;
+
+error:
+	read_unlock(&mptcp_gws_lock);
+	kfree(opt);
 	return;
 }
 
@@ -556,8 +563,10 @@ void mptcp_v4_add_lsrr(struct mptcp_cb * mpcb, struct tcp_sock * tp,
 int mptcp_parse_gateway_ipv4(char * gateways)
 {
 	int i, j, k, ret;
-	char * tmp_string;
+	char * tmp_string = NULL;
 	struct in_addr tmp_addr;
+
+	write_lock(&mptcp_gws_lock);
 
 	if ((tmp_string = kzalloc(16, GFP_KERNEL)) == NULL)
 		goto error;
@@ -615,12 +624,14 @@ int mptcp_parse_gateway_ipv4(char * gateways)
 
 	mptcp_gws->timestamp = get_jiffies_64();
 	kfree(tmp_string);
+	write_unlock(&mptcp_gws_lock);
 
 	return 0;
 
 error:
 	kfree(tmp_string);
 	memset(mptcp_gws, 0, sizeof(struct mptcp_gw_list));
+	write_unlock(&mptcp_gws_lock);
 	return -1;
 }
 

@@ -214,6 +214,7 @@ static ctl_table mptcp_root_table[] = {
 #endif
 
 struct mptcp_gw_list * mptcp_gws;
+rwlock_t mptcp_gws_lock;
 
 struct sock *mptcp_select_ack_sock(const struct mptcp_cb *mpcb, int copied)
 {
@@ -661,41 +662,42 @@ void mptcp_inherit_sk(struct sock *sk, struct sock *newsk, int family,
 int mptcp_calc_fingerprint_gateway_list(u8 * fingerprint, u8 * data,
 		size_t size)
 {
-	struct scatterlist * sg;
-	struct crypto_hash * tfm;
+	struct scatterlist * sg = NULL;
+	struct crypto_hash * tfm = NULL;
 	struct hash_desc desc;
 
 	if (size > PAGE_SIZE)
-		return -1;
+		goto error;
 
 	if ((sg = kmalloc(sizeof(struct scatterlist), GFP_KERNEL)) == NULL)
-		return -ENOMEM;
-
-	//if ((sg = kmalloc(sizeof(struct hasc_desc), GFP_KERNEL)) == NULL)
-	//	return -ENOMEM;
+		goto error;
 
 	if ((tfm = crypto_alloc_hash("md5", 0, CRYPTO_ALG_ASYNC)) == NULL)
-		return -ENOMEM;
+		goto error;
 
 	sg_init_one(sg, (u8 *)data, size);
 
 	desc.tfm = tfm;
 	if (crypto_hash_init(&desc) != 0)
-		return -1;
+		goto error;
 
 	if (crypto_hash_digest(&desc, sg, size, fingerprint) != 0)
-		return -1;
+		goto error;
 
 	crypto_free_hash(tfm);
 	kfree(sg);
-	//kfree(desc);
 
 	return 0;
+
+error:
+	crypto_free_hash(tfm);
+	kfree(sg);
+	return -1;
 }
 
 int mptcp_update_mpcb_gateway_list(struct mptcp_cb * mpcb) {
 	int i, j;
-	u8 * tmp_avail, * tmp_used;
+	u8 * tmp_avail = NULL, * tmp_used = NULL;
 
 	if (mpcb->list_fingerprints.timestamp >= mptcp_gws->timestamp)
 		return 0;
@@ -1712,6 +1714,7 @@ static int __init mptcp_init(void)
 	if ((mptcp_gws = kzalloc(sizeof(struct mptcp_gw_list), GFP_KERNEL))
 			== NULL)
 		return -ENOMEM;
+	rwlock_init(&mptcp_gws_lock);
 	mptcp_sock_cache = kmem_cache_create("mptcp_sock",
 					     sizeof(struct mptcp_tcp_sock),
 					     0, SLAB_HWCACHE_ALIGN|SLAB_PANIC,
