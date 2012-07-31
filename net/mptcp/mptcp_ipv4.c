@@ -459,7 +459,7 @@ void mptcp_init4_subsockets(struct mptcp_cb *mpcb,
 
 	/* Adds loose source routing to the socket via IP_OPTION */
 	if (sysctl_mptcp_ndiffports > 1)
-		mptcp_v4_subflow_add_lsrr(mpcb, tp, &sock, rem->addr);
+		mptcp_v4_add_lsrr(mpcb, tp, &sock, rem->addr);
 
 	ret = sock.ops->bind(&sock, (struct sockaddr *)&loc_in, ulid_size);
 	if (ret < 0) {
@@ -497,7 +497,7 @@ error:
  *  to make sure it's up to date. In case of error, all the lists are
  *  marked as unavailable and the subflow's fingerprint is set to 0.
  */
-void mptcp_v4_subflow_add_lsrr(struct mptcp_cb * mpcb, struct tcp_sock * tp,
+void mptcp_v4_add_lsrr(struct mptcp_cb * mpcb, struct tcp_sock * tp,
 		struct socket * sock, struct in_addr rem)
 {
 	int i, j, ret;
