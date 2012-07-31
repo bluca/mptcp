@@ -595,7 +595,8 @@ int mptcp_parse_gateway_ipv4(char * gateways)
 					if (mptcp_calc_fingerprint_gateway_list(
 							(u8 *)&mptcp_gws->gw_list_fingerprint[k],
 							(u8 *)&mptcp_gws->list[k][0],
-							sizeof(mptcp_gws->list[k][0].s_addr) * mptcp_gws->len[k])) {
+							sizeof(mptcp_gws->list[k][0].s_addr) *
+							mptcp_gws->len[k])) {
 						goto error;
 					}
 					++k;

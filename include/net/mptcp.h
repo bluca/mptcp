@@ -100,6 +100,9 @@ struct request_sock *rev_mptcp_rsk(const struct mptcp_request_sock *req)
 	return (struct request_sock *)req;
 }
 
+#if IS_ENABLED(CONFIG_IPV6)
+#define MPTCP_GATEWAY6_SYSCTL_MAX_LEN	260
+#endif
 #define MPTCP_GATEWAY_SYSCTL_MAX_LEN	160
 #define MPTCP_GATEWAY_LIST_MAX_LEN	10
 #define MPTCP_GATEWAY_MAX_LISTS	6
@@ -582,6 +585,7 @@ extern int sysctl_mptcp_enabled;
 extern int sysctl_mptcp_checksum;
 extern int sysctl_mptcp_debug;
 extern char sysctl_mptcp_gateways[];
+extern char sysctl_mptcp_gateways6[];
 
 extern struct workqueue_struct *mptcp_wq;
 

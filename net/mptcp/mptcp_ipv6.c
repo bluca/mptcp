@@ -500,6 +500,84 @@ error:
 	return;
 }
 
+/*
+ *  Parses gateways string for a list of paths to different
+ *  gateways, and stores them for use with the Loose Source Routing (LSRR)
+ *  socket option. Each list must have "," separated addresses, and the lists
+ *  themselves must be separated by "-". Returns -1 in case one or more of the
+ *  addresses is not a valid ipv4/6 address. Sysctl string must end in '-'.
+ */
+int mptcp_parse_gateway_ipv6(char * gateways)
+{
+	int i, j, k, ret;
+	char * tmp_string;
+	struct in6_addr tmp_addr;
+
+	if ((tmp_string = kzalloc(40, GFP_KERNEL)) == NULL)
+		goto error;
+
+	memset(mptcp_gws, 0, sizeof(struct mptcp_gw_list));
+
+	/*
+	 * First condition is a hack, we want to keep working when the termination
+	 * char is founded, but we do not want to read before the array beginning.
+	 * A TMP string is used since inet_pton needs a null terminated string but
+	 * we do not want to modify the sysctl for obvious reasons.
+	 * If a single list is longer than allowed then we overwrite the last ip
+	 * address until the end of the list or of the string is encountered, maybe
+	 * an error should be printed as well?
+	 */
+	for (i = j = k = 0; gateways[i] != '\0' && i < MPTCP_GATEWAY6_SYSCTL_MAX_LEN
+			&& k < MPTCP_GATEWAY_MAX_LISTS; ++i) {
+		if (gateways[i] == '-' || gateways[i] == ',') {
+			tmp_string[j] = '\0';
+			mptcp_debug("mptcp_parse_gateway_list tmp: %s i: %d \n",
+					tmp_string, i);
+
+			/*ret = inet_pton(AF_INET, tmp_string, &tmp_addr);*/
+			ret = in6_pton(tmp_string, strlen(tmp_string),
+					(u8 *) &tmp_addr.s6_addr, '\0', NULL);
+
+			if (ret) {
+				mptcp_debug("mptcp_parse_gateway_list ret: %d s_addr: %lu\n",
+						ret, (unsigned long)tmp_addr.s6_addr);
+				memcpy(&mptcp_gws->list6[k][mptcp_gws->len[k]].s6_addr,
+						&tmp_addr.s6_addr, sizeof(tmp_addr.s6_addr));
+				mptcp_gws->len[k]++;
+				j = 0;
+				if (gateways[i] == '-') {
+					if (mptcp_calc_fingerprint_gateway_list(
+							(u8 *)&mptcp_gws->gw_list_fingerprint[k],
+							(u8 *)&mptcp_gws->list6[k][0],
+							sizeof(mptcp_gws->list6[k][0].s6_addr) *
+							mptcp_gws->len[k])) {
+						goto error;
+					}
+					++k;
+				} else if (gateways[i] != '\0'
+						&& mptcp_gws->len[k] >= MPTCP_GATEWAY_LIST_MAX_LEN) {
+					mptcp_gws->len[k]--;
+				}
+			} else {
+				goto error;
+			}
+		} else {
+			tmp_string[j] = gateways[i];
+			++j;
+		}
+	}
+
+	mptcp_gws->timestamp = get_jiffies_64();
+	kfree(tmp_string);
+
+	return 0;
+
+error:
+	kfree(tmp_string);
+	memset(mptcp_gws, 0, sizeof(struct mptcp_gw_list));
+	return -1;
+}
+
 struct mptcp_dad_data {
 	struct timer_list timer;
 	struct inet6_ifaddr *ifa;

@@ -74,6 +74,9 @@ int sysctl_mptcp_enabled __read_mostly = 1;
 int sysctl_mptcp_checksum __read_mostly = 1;
 int sysctl_mptcp_debug __read_mostly = 0;
 char sysctl_mptcp_gateways[MPTCP_GATEWAY_SYSCTL_MAX_LEN] __read_mostly;
+#if IS_ENABLED(CONFIG_IPV6)
+char sysctl_mptcp_gateways6[MPTCP_GATEWAY6_SYSCTL_MAX_LEN] __read_mostly;
+#endif
 EXPORT_SYMBOL(sysctl_mptcp_debug);
 
 /*
@@ -105,6 +108,35 @@ static int proc_mptcp_gateways(ctl_table *ctl, int write,
 
 	return ret;
 }
+
+#if IS_ENABLED(CONFIG_IPV6)
+/* ipv6 version of the callback */
+static int proc_mptcp_gateways6(ctl_table *ctl, int write,
+				       void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	int ret;
+	ctl_table tbl = {
+		.maxlen = MPTCP_GATEWAY6_SYSCTL_MAX_LEN,
+	};
+
+	if (write) {
+		if ((tbl.data = kzalloc(MPTCP_GATEWAY6_SYSCTL_MAX_LEN, GFP_KERNEL))
+				== NULL)
+			return -1;
+		ret = proc_dostring(&tbl, write, buffer, lenp, ppos);
+		if (ret == 0) {
+			ret = mptcp_parse_gateway_ipv6(tbl.data);
+			memcpy(ctl->data, tbl.data, MPTCP_GATEWAY6_SYSCTL_MAX_LEN);
+		}
+		kfree(tbl.data);
+	} else {
+		ret = proc_dostring(ctl, write, buffer, lenp, ppos);
+	}
+
+
+	return ret;
+}
+#endif
 
 static ctl_table mptcp_table[] = {
 	{
@@ -149,6 +181,15 @@ static ctl_table mptcp_table[] = {
 		.mode = 0644,
 		.proc_handler = &proc_mptcp_gateways
 	},
+#if IS_ENABLED(CONFIG_IPV6)
+	{
+		.procname = "mptcp_gateways6",
+		.data = &sysctl_mptcp_gateways6,
+		.maxlen = sizeof(char) * MPTCP_GATEWAY6_SYSCTL_MAX_LEN,
+		.mode = 0644,
+		.proc_handler = &proc_mptcp_gateways6
+	},
+#endif
 	{ }
 };
 
