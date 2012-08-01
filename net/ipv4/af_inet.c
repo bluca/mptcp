@@ -148,7 +148,11 @@ void inet_sock_destruct(struct sock *sk)
 	}
 
 	if (sk->sk_type == SOCK_STREAM && sk->sk_protocol == IPPROTO_TCP &&
-	    tcp_sk(sk)->mpc)
+	    tcp_sk(sk)->mptcp)
+		/* Important to check here for mptcp, because mpc may be 0 but
+		 * mptcp still set (it's the case when calling tcp_disconnect
+		 * with the meta-sk).
+		 */
 		mptcp_sock_destruct(sk);
 
 	if (!sock_flag(sk, SOCK_DEAD)) {
@@ -691,7 +695,7 @@ int inet_accept(struct socket *sock, struct socket *newsock, int flags)
 
 	sock_rps_record_flow(sk2);
 
-	if (sk2->sk_protocol == IPPROTO_TCP && tcp_sk(sk2)->mptcp) {
+	if (sk2->sk_protocol == IPPROTO_TCP && tcp_sk(sk2)->mpc) {
 		struct sock *sk_it = sk2;
 
 		mptcp_for_each_sk(tcp_sk(sk2)->mpcb, sk_it) {

@@ -996,7 +996,7 @@ void mptcp_del_sock(struct sock *sk)
 	struct mptcp_cb *mpcb;
 	int i, done = 0;
 
-	if (!tp->mptcp || !tp->mptcp->attached)
+	if (!tp->mpc || !tp->mptcp->attached)
 		return;
 
 	mpcb = tp->mpcb;
@@ -1220,6 +1220,7 @@ void mptcp_sub_close_wq(struct work_struct *work)
 
 	if (!tp->mpc) {
 		tcp_close(sk, 0);
+		sock_put(sk);
 		return;
 	}
 
@@ -1259,6 +1260,25 @@ void mptcp_sub_close(struct sock *sk, unsigned long delay)
 	if (!delay) {
 		unsigned char old_state = sk->sk_state;
 
+		/* If we are in user-context we can directly do the closing
+		 * procedure. No need to schedule a work-queue. */
+		if (!in_interrupt()) {
+			struct sock *meta_sk = mptcp_meta_sk(sk);
+
+			if (!tcp_sk(sk)->mpc) {
+				tcp_close(sk, 0);
+				return;
+			}
+
+			if (meta_sk->sk_shutdown == SHUTDOWN_MASK ||
+			    sk->sk_state == TCP_CLOSE)
+				tcp_close(sk, 0);
+			else if (tcp_close_state(sk))
+				tcp_send_fin(sk);
+
+			return;
+		}
+
 		/* We directly send the FIN. Because it may take so a long time,
 		 * untile the work-queue will get scheduled...
 		 *
@@ -1287,7 +1307,7 @@ void mptcp_update_window_clamp(struct tcp_sock *tp)
 	int new_rcvbuf = 0;
 
 	/* Can happen if called from non mpcb sock. */
-	if (!tp->mptcp)
+	if (!tp->mpc)
 		return;
 
 	mpcb = tp->mpcb;
@@ -1349,9 +1369,11 @@ void mptcp_close(struct sock *meta_sk, long timeout)
 			sock_rps_reset_flow(sk_it);
 	}
 
-	/* Detach the mpcb from the token hashtable */
-	mptcp_hash_remove(mpcb);
-	reqsk_queue_destroy(&((struct inet_connection_sock *)mpcb)->icsk_accept_queue);
+	if (!list_empty(&mpcb->collide_tk)) {
+		/* Detach the mpcb from the token hashtable */
+		mptcp_hash_remove(mpcb);
+		reqsk_queue_destroy(&((struct inet_connection_sock *)mpcb)->icsk_accept_queue);
+	}
 
 	meta_sk->sk_shutdown = SHUTDOWN_MASK;
 	/* We need to flush the recv. buffs.  We do this only on the
@@ -1379,6 +1401,10 @@ void mptcp_close(struct sock *meta_sk, long timeout)
 		NET_INC_STATS_USER(sock_net(meta_sk), LINUX_MIB_TCPABORTONCLOSE);
 		tcp_set_state(meta_sk, TCP_CLOSE);
 		tcp_send_active_reset(meta_sk, meta_sk->sk_allocation);
+	} else if (sock_flag(meta_sk, SOCK_LINGER) && !meta_sk->sk_lingertime) {
+		/* Check zero linger _after_ checking for unread data. */
+		meta_sk->sk_prot->disconnect(meta_sk, 0);
+		NET_INC_STATS_USER(sock_net(meta_sk), LINUX_MIB_TCPABORTONDATA);
 	} else if (tcp_close_state(meta_sk)) {
 		mptcp_send_fin(meta_sk);
 	} else if (meta_tp->snd_una == meta_tp->write_seq) {
@@ -1478,7 +1504,7 @@ out:
 
 void mptcp_set_bw_est(struct tcp_sock *tp, u32 now)
 {
-	if (!tp->mptcp)
+	if (!tp->mpc)
 		return;
 
 	if (!tp->mptcp->bw_est.time)
@@ -1552,11 +1578,11 @@ void mptcp_set_state(struct sock *sk, int state)
 		 * has no support for MPTCP. This is the only option
 		 * as we don't know yet if he is MP_CAPABLE.
 		 */
-		if (tp->mpcb && is_master_tp(tp))
+		if (tp->mpc && is_master_tp(tp))
 			mptcp_meta_sk(sk)->sk_state = state;
 		break;
 	case TCP_CLOSE:
-		if (tcp_sk(sk)->mpcb && oldstate != TCP_SYN_SENT &&
+		if (tcp_sk(sk)->mpc && oldstate != TCP_SYN_SENT &&
 		    oldstate != TCP_SYN_RECV && oldstate != TCP_LISTEN)
 			tcp_sk(sk)->mpcb->cnt_established--;
 	}
