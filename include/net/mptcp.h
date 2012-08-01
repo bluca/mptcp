@@ -106,7 +106,7 @@ struct request_sock *rev_mptcp_rsk(const struct mptcp_request_sock *req)
 #define MPTCP_GATEWAY_SYSCTL_MAX_LEN	160
 #define MPTCP_GATEWAY_LIST_MAX_LEN	10
 #define MPTCP_GATEWAY_MAX_LISTS	6
-#define MPTCP_GATEWAY_FP_SIZE	16
+#define MPTCP_GATEWAY_FP_SIZE	TCP_GATEWAY_FP_SIZE
 
 struct mptcp_gw_list {
 #if IS_ENABLED(CONFIG_IPV6)

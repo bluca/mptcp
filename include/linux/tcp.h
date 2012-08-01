@@ -312,6 +312,8 @@ struct tcp_options_received {
 #endif /* CONFIG_MPTCP */
 };
 
+#define TCP_GATEWAY_FP_SIZE	16
+
 struct mptcp_cb;
 struct mptcp_tcp_sock;
 
@@ -547,6 +549,9 @@ struct tcp_sock {
 	u32		mptcp_loc_token;
 	u64		mptcp_loc_key;
 #endif /* CONFIG_MPTCP */
+	/* fprint of the list, to look it up set it available on socket close */
+	u8 gw_fingerprint[TCP_GATEWAY_FP_SIZE];
+	u8 gw_is_set;
 };
 
 #ifdef CONFIG_MPTCP

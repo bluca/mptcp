@@ -43,6 +43,16 @@
 #include <net/request_sock.h>
 #include <net/tcp.h>
 
+#include <linux/route.h>
+#include <linux/mroute.h>
+#include <net/inet_ecn.h>
+#include <net/route.h>
+#include <net/xfrm.h>
+#include <net/compat.h>
+#if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
+#include <net/transp_v6.h>
+#endif
+
 #if IS_ENABLED(CONFIG_IPV6)
 #define AF_INET_FAMILY(fam) ((fam) == AF_INET)
 #else
@@ -458,8 +468,7 @@ void mptcp_init4_subsockets(struct mptcp_cb *mpcb,
 		    ntohs(rem_in.sin_port));
 
 	/* Adds loose source routing to the socket via IP_OPTION */
-	if (sysctl_mptcp_ndiffports > 1)
-		mptcp_v4_add_lsrr(mpcb, tp, &sock, rem->addr);
+	mptcp_v4_add_lsrr(sk, rem->addr);
 
 	ret = sock.ops->bind(&sock, (struct sockaddr *)&loc_in, ulid_size);
 	if (ret < 0) {
@@ -497,20 +506,29 @@ error:
  *  to make sure it's up to date. In case of error, all the lists are
  *  marked as unavailable and the subflow's fingerprint is set to 0.
  */
-void mptcp_v4_add_lsrr(struct mptcp_cb * mpcb, struct tcp_sock * tp,
-		struct socket * sock, struct in_addr rem)
+void mptcp_v4_add_lsrr(struct sock * sk, struct in_addr rem)
 {
 	int i, j, ret;
 	char * opt = NULL;
+	struct tcp_sock * tp = tcp_sk(sk);
+
+	if (sysctl_mptcp_ndiffports <= 1)
+		return;
 
 	read_lock(&mptcp_gws_lock);
 
-	if (mptcp_update_mpcb_gateway_list(mpcb))
-		goto error;
+	if (tp->mpcb != NULL) {
+		if (mptcp_update_mpcb_gateway_list(tp->mpcb))
+			goto error;
 
-	for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i)
-		if (mpcb->list_fingerprints.gw_list_avail[i] == 1)
-			break;
+		for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i)
+			if (tp->mpcb->list_fingerprints.gw_list_avail[i] == 1)
+				break;
+	} else {
+		for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i)
+			if (mptcp_gws->len[i] > 0)
+				break;
+	}
 
 	if (i < MPTCP_GATEWAY_MAX_LISTS && mptcp_gws->len[i] > 0) {
 		opt = kmalloc(MAX_IPOPTLEN, GFP_KERNEL);
@@ -527,20 +545,40 @@ void mptcp_v4_add_lsrr(struct mptcp_cb * mpcb, struct tcp_sock * tp,
 		memcpy(opt + 4 + (j * sizeof(rem.s_addr)), &rem.s_addr,
 				sizeof(rem.s_addr));
 
-		ret = sock->ops->setsockopt(sock, IPPROTO_IP, IP_OPTIONS, opt,
-				4 + sizeof(mptcp_gws->list[i][0].s_addr)
-				* (mptcp_gws->len[i] + 1));
+		/*
+		 * If lock not released, deadlocks: do_ip_setsockopt tries to get the
+		 * lock.
+		 */
+		//release_sock(sk);
+		//if (tp->mpcb != NULL)
+			ret = ip_setsockopt(sk, IPPROTO_IP, IP_OPTIONS, opt,
+					4 + sizeof(mptcp_gws->list[i][0].s_addr)
+					* (mptcp_gws->len[i] + 1));
+		/*else
+		//	ret = add_ip_opt(sk, IPPROTO_IP, IP_OPTIONS, opt,
+					4 + sizeof(mptcp_gws->list[i][0].s_addr)
+					* (mptcp_gws->len[i] + 1));
+		//lock_sock(sk);*/
+
+
+
 		if (ret < 0) {
 			mptcp_debug(KERN_ERR "%s: MPTCP subsocket setsockopt() IP_OPTIONS "
 			"failed, error %d\n", __func__, ret);
 			goto error;
 		}
 
-		mpcb->list_fingerprints.gw_list_avail[i] = 0;
-		memcpy(&tp->mptcp->gw_fingerprint,
-				&mpcb->list_fingerprints.gw_list_fingerprint[0],
-				sizeof(u8) * MPTCP_GATEWAY_FP_SIZE);
-		tp->mptcp->gw_is_set = 1;
+		if (tp->mpcb != NULL) {
+			tp->mpcb->list_fingerprints.gw_list_avail[i] = 0;
+			memcpy(&tp->mptcp->gw_fingerprint,
+					&tp->mpcb->list_fingerprints.gw_list_fingerprint[0],
+					sizeof(u8) * MPTCP_GATEWAY_FP_SIZE);
+			tp->mptcp->gw_is_set = 1;
+		} else {
+			memcpy(&tp->gw_fingerprint, &mptcp_gws->gw_list_fingerprint[i],
+					sizeof(u8) * MPTCP_GATEWAY_FP_SIZE);
+			tp->gw_is_set = 1;
+		}
 		kfree(opt);
 	}
 
@@ -552,6 +590,82 @@ error:
 	kfree(opt);
 	return;
 }
+
+static void opt_kfree_rcu(struct rcu_head *head)
+{
+	kfree(container_of(head, struct ip_options_rcu, rcu));
+}
+
+int add_ip_opt(struct sock *sk, int level,
+			    int optname, char *optval, unsigned int optlen)
+{
+	struct inet_sock *inet = inet_sk(sk);
+	struct ip_options_rcu *old, *opt = NULL;
+	int val = 0, err;
+
+	if (((1<<optname) & ((1<<IP_PKTINFO) | (1<<IP_RECVTTL) |
+			     (1<<IP_RECVOPTS) | (1<<IP_RECVTOS) |
+			     (1<<IP_RETOPTS) | (1<<IP_TOS) |
+			     (1<<IP_TTL) | (1<<IP_HDRINCL) |
+			     (1<<IP_MTU_DISCOVER) | (1<<IP_RECVERR) |
+			     (1<<IP_ROUTER_ALERT) | (1<<IP_FREEBIND) |
+			     (1<<IP_PASSSEC) | (1<<IP_TRANSPARENT) |
+			     (1<<IP_MINTTL) | (1<<IP_NODEFRAG))) ||
+	    optname == IP_MULTICAST_TTL ||
+	    optname == IP_MULTICAST_ALL ||
+	    optname == IP_MULTICAST_LOOP ||
+	    optname == IP_RECVORIGDSTADDR) {
+		if (optlen >= sizeof(int)) {
+			if (get_user(val, (int __user *) optval))
+				return -EFAULT;
+		} else if (optlen >= sizeof(char)) {
+			unsigned char ucval;
+
+			if (get_user(ucval, (unsigned char __user *) optval))
+				return -EFAULT;
+			val = (int) ucval;
+		}
+	}
+
+	/* If optlen==0, it is equivalent to val == 0 */
+
+	if (ip_mroute_opt(optname))
+		return ip_mroute_setsockopt(sk, optname, optval, optlen);
+
+	err = 0;
+
+
+	if (optlen > 40)
+		return err;
+	err = ip_options_get(sock_net(sk), &opt,
+					   optval, optlen);
+	if (err)
+		return err;
+	old = rcu_dereference_protected(inet->inet_opt,
+					sock_owned_by_user(sk));
+	if (inet->is_icsk) {
+		struct inet_connection_sock *icsk = inet_csk(sk);
+#if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
+		if (sk->sk_family == PF_INET ||
+			(!((1 << sk->sk_state) &
+			   (TCPF_LISTEN | TCPF_CLOSE)) &&
+			 inet->inet_daddr != LOOPBACK4_IPV6)) {
+#endif
+			if (old)
+				icsk->icsk_ext_hdr_len -= old->opt.optlen;
+			if (opt)
+				icsk->icsk_ext_hdr_len += opt->opt.optlen;
+			icsk->icsk_sync_mss(sk, icsk->icsk_pmtu_cookie);
+#if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
+		}
+#endif
+	}
+	rcu_assign_pointer(inet->inet_opt, opt);
+	if (old)
+		call_rcu(&old->rcu, opt_kfree_rcu);
+	return err;
+}
+
 
 /*
  *  Parses gateways string for a list of paths to different
