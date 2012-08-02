@@ -3383,8 +3383,6 @@ static int tcp_clean_rtx_queue(struct sock *sk, int prior_fackets,
 			tp->lost_skb_hint = NULL;
 	}
 
-	mptcp_set_bw_est(tp, now);
-
 	if (likely(between(tp->snd_up, prior_snd_una, tp->snd_una)))
 		tp->snd_up = tp->snd_una;
 
@@ -3839,8 +3837,10 @@ old_ack:
  * But, this can also be called on packets in the established flow when
  * the fast version below fails.
  */
-void tcp_parse_options(const struct sk_buff *skb, struct tcp_options_received *opt_rx,
-		       const u8 **hvpp, struct multipath_options *mopt, int estab)
+static void __tcp_parse_options(const struct sk_buff *skb,
+				struct tcp_options_received *opt_rx,
+				const u8 **hvpp, struct multipath_options *mopt,
+				int estab, int fast)
 {
 	const unsigned char *ptr;
 	const struct tcphdr *th = tcp_hdr(skb);
@@ -3949,8 +3949,13 @@ void tcp_parse_options(const struct sk_buff *skb, struct tcp_options_received *o
 				}
 				break;
 			case TCPOPT_MPTCP:
-				mptcp_parse_options(ptr - 2, opsize, opt_rx,
-						    mopt, skb);
+				/* Does not parse TCP options if coming from
+				 * tcp_fast_parse_options. They will be parsed
+				 * later.
+				 */
+				if (!fast)
+					mptcp_parse_options(ptr - 2, opsize,
+							    opt_rx, mopt, skb);
 				break;
 			}
 
@@ -3958,6 +3963,12 @@ void tcp_parse_options(const struct sk_buff *skb, struct tcp_options_received *o
 			length -= opsize;
 		}
 	}
+}
+
+void tcp_parse_options(const struct sk_buff *skb, struct tcp_options_received *opt_rx,
+		       const u8 **hvpp, struct multipath_options *mopt, int estab)
+{
+	__tcp_parse_options(skb, opt_rx, hvpp, mopt, estab, 0);
 }
 EXPORT_SYMBOL(tcp_parse_options);
 
@@ -3998,8 +4009,8 @@ static int tcp_fast_parse_options(const struct sk_buff *skb,
 	}
 	mpcb = mpcb_from_tcpsock(tp);
 
-	tcp_parse_options(skb, &tp->rx_opt, hvpp,
-			  mpcb ? &mpcb->rx_opt : NULL, 1);
+	__tcp_parse_options(skb, &tp->rx_opt, hvpp,
+			    mpcb ? &mpcb->rx_opt : NULL, 1, 1);
 
 	mptcp_path_array_check(mpcb);
 	mptcp_mp_fail_rcvd(mpcb, (struct sock *)tp, th);
@@ -5455,6 +5466,10 @@ static int tcp_validate_incoming(struct sock *sk, struct sk_buff *skb,
 		tcp_reset(sk);
 		return -1;
 	}
+
+	/* If valid: post process the received MPTCP options. */
+	if (tp->mpc)
+		mptcp_post_parse_options(tp, skb);
 
 	return 1;
 
