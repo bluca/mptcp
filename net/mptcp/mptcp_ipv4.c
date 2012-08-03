@@ -468,7 +468,7 @@ void mptcp_init4_subsockets(struct mptcp_cb *mpcb,
 		    ntohs(rem_in.sin_port));
 
 	/* Adds loose source routing to the socket via IP_OPTION */
-	mptcp_v4_add_lsrr(sk, rem->addr);
+	//mptcp_v4_add_lsrr(sk, rem->addr);
 
 	ret = sock.ops->bind(&sock, (struct sockaddr *)&loc_in, ulid_size);
 	if (ret < 0) {
@@ -549,6 +549,7 @@ void mptcp_v4_add_lsrr(struct sock * sk, struct in_addr rem)
 		 * If lock not released, deadlocks: do_ip_setsockopt tries to get the
 		 * lock.
 		 */
+		//local_bh_disable();
 		//release_sock(sk);
 		//if (tp->mpcb != NULL)
 			ret = ip_setsockopt(sk, IPPROTO_IP, IP_OPTIONS, opt,
@@ -559,8 +560,7 @@ void mptcp_v4_add_lsrr(struct sock * sk, struct in_addr rem)
 					4 + sizeof(mptcp_gws->list[i][0].s_addr)
 					* (mptcp_gws->len[i] + 1));
 		//lock_sock(sk);*/
-
-
+		//local_bh_enable();
 
 		if (ret < 0) {
 			mptcp_debug(KERN_ERR "%s: MPTCP subsocket setsockopt() IP_OPTIONS "
