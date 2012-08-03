@@ -301,15 +301,11 @@ void mptcp_v6_set_init_addr_bit(struct mptcp_cb *mpcb,
 }
 
 /**
- * Currently we can only process join requests here.
- * (either the SYN or the final ACK)
+ * We only process join requests here. (either the SYN or the final ACK)
  */
 int mptcp_v6_do_rcv(struct sock *meta_sk, struct sk_buff *skb)
 {
-	struct ipv6hdr *iph = ipv6_hdr(skb);
-	struct tcphdr *th = tcp_hdr(skb);
 	struct mptcp_cb *mpcb = (struct mptcp_cb *)meta_sk;
-	struct request_sock **prev, *req;
 	struct sock *child;
 
 	/* Has been removed from the tk-table. Thus, no new subflows.
@@ -319,33 +315,28 @@ int mptcp_v6_do_rcv(struct sock *meta_sk, struct sk_buff *skb)
 	if (meta_sk->sk_state == TCP_CLOSE || list_empty(&mpcb->collide_tk))
 		goto reset_and_discard;
 
-	req = inet6_csk_search_req(meta_sk, &prev, th->source,
-			&iph->saddr, &iph->daddr, inet6_iif(skb));
+	child = tcp_v6_hnd_req(meta_sk, skb);
 
-	if (!req) {
-		if (th->syn) {
-			struct mp_join *join_opt = mptcp_find_join(skb);
-			/* Currently we make two calls to mptcp_find_join(). This
-			 * can probably be optimized. */
-			if (mptcp_v6_add_raddress(&mpcb->rx_opt,
-					(struct in6_addr *)&iph->saddr, 0,
-					join_opt->addr_id) < 0)
-				goto reset_and_discard;
-			if (mpcb->rx_opt.list_rcvd)
-				mpcb->rx_opt.list_rcvd = 0;
-
-			mptcp_v6_join_request(mpcb, skb);
-		}
-		goto discard;
-	}
-
-	child = tcp_check_req(meta_sk, skb, req, prev);
 	if (!child)
 		goto discard;
 
 	if (child != meta_sk) {
 		tcp_child_process(meta_sk, child, skb);
 	} else {
+		if (tcp_hdr(skb)->syn) {
+			struct mp_join *join_opt = mptcp_find_join(skb);
+			/* Currently we make two calls to mptcp_find_join(). This
+			 * can probably be optimized. */
+			if (mptcp_v6_add_raddress(&mpcb->rx_opt,
+					(struct in6_addr *)&ipv6_hdr(skb)->saddr, 0,
+					join_opt->addr_id) < 0)
+				goto reset_and_discard;
+			if (mpcb->rx_opt.list_rcvd)
+				mpcb->rx_opt.list_rcvd = 0;
+
+			mptcp_v6_join_request(mpcb, skb);
+			goto discard;
+		}
 		goto reset_and_discard;
 	}
 	return 0;
@@ -358,44 +349,37 @@ discard:
 }
 
 /**
- * Inspired from inet_csk_search_req
- * After this, the kref count of the mpcb associated with the request_sock
+ * After this, the ref count of the meta_sk associated with the request_sock
  * is incremented. Thus it is the responsibility of the caller
- * to call mpcb_put() when the reference is not needed anymore.
+ * to call sock_put() when the reference is not needed anymore.
  */
-struct request_sock *mptcp_v6_search_req(const __be16 rport,
-					const struct in6_addr *raddr,
-					const struct in6_addr *laddr)
+struct sock *mptcp_v6_search_req(const __be16 rport, const struct in6_addr *raddr,
+				 const struct in6_addr *laddr)
 {
 	struct mptcp_request_sock *mtreq;
-	int found = 0;
+	struct sock *meta_sk = NULL;
 
 	spin_lock(&mptcp_reqsk_hlock);
-	list_for_each_entry(mtreq, &mptcp_reqsk_htb[
-				inet6_synq_hash(raddr, rport, 0,
-				MPTCP_HASH_SIZE)],
-				collide_tuple) {
-		struct request_sock *req = rev_mptcp_rsk(mtreq);
-		const struct inet6_request_sock *treq = inet6_rsk(req);
+	list_for_each_entry(mtreq,
+			    &mptcp_reqsk_htb[inet6_synq_hash(raddr, rport, 0,
+					    	    	     MPTCP_HASH_SIZE)],
+			    collide_tuple) {
+		const struct inet6_request_sock *treq = inet6_rsk(rev_mptcp_rsk(mtreq));
 
-		if (inet_rsk(req)->rmt_port == rport &&
-		    AF_INET6_FAMILY(req->rsk_ops->family) &&
+		if (inet_rsk(rev_mptcp_rsk(mtreq))->rmt_port == rport &&
+		    AF_INET6_FAMILY(rev_mptcp_rsk(mtreq)->rsk_ops->family) &&
 		    ipv6_addr_equal(&treq->rmt_addr, raddr) &&
 		    ipv6_addr_equal(&treq->loc_addr, laddr)) {
-			WARN_ON(req->sk);
-			found = 1;
+			meta_sk = mpcb_meta_sk(mtreq->mpcb);
 			break;
 		}
 	}
 
-	if (found)
-		sock_hold(mpcb_meta_sk(mtreq->mpcb));
+	if (meta_sk)
+		sock_hold(meta_sk);
 	spin_unlock(&mptcp_reqsk_hlock);
 
-	if (!found)
-		return NULL;
-
-	return rev_mptcp_rsk(mtreq);
+	return meta_sk;
 }
 
 /**
@@ -702,7 +686,7 @@ void mptcp_pm_addr6_event_handler(struct inet6_ifaddr *ifa, unsigned long event,
 	}
 
 	/* Not yet in address-list */
-	if (event == NETDEV_UP && netif_running(ifa->idev->dev)) {
+	if ((event == NETDEV_UP || event == NETDEV_CHANGE) && netif_running(ifa->idev->dev)) {
 		i = __mptcp_find_free_index(mpcb->loc6_bits, 0, mpcb->next_v6_index);
 		if (i < 0) {
 			mptcp_debug("MPTCP_PM: NETDEV_UP Reached max "

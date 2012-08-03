@@ -303,15 +303,11 @@ void mptcp_v4_set_init_addr_bit(struct mptcp_cb *mpcb, __be32 daddr)
 }
 
 /**
- * Currently we can only process join requests here.
- * (either the SYN or the final ACK)
+ * We only process join requests here. (either the SYN or the final ACK)
  */
 int mptcp_v4_do_rcv(struct sock *meta_sk, struct sk_buff *skb)
 {
-	struct iphdr *iph = ip_hdr(skb);
-	struct tcphdr *th = tcp_hdr(skb);
 	struct mptcp_cb *mpcb = (struct mptcp_cb *)meta_sk;
-	struct request_sock **prev, *req;
 	struct sock *child;
 
 	/* Has been removed from the tk-table. Thus, no new subflows.
@@ -321,33 +317,28 @@ int mptcp_v4_do_rcv(struct sock *meta_sk, struct sk_buff *skb)
 	if (meta_sk->sk_state == TCP_CLOSE || list_empty(&mpcb->collide_tk))
 		goto reset_and_discard;
 
-	req = inet_csk_search_req(meta_sk, &prev, th->source,
-				  iph->saddr, iph->daddr);
+	child = tcp_v4_hnd_req(meta_sk, skb);
 
-	if (!req) {
-		if (th->syn) {
-			struct mp_join *join_opt = mptcp_find_join(skb);
-			/* Currently we make two calls to mptcp_find_join(). This
-			 * can probably be optimized. */
-			if (mptcp_v4_add_raddress(&mpcb->rx_opt,
-					(struct in_addr *)&iph->saddr, 0,
-					join_opt->addr_id) < 0)
-				goto reset_and_discard;
-			if (mpcb->rx_opt.list_rcvd)
-				mpcb->rx_opt.list_rcvd = 0;
-
-			mptcp_v4_join_request(mpcb, skb);
-		}
-		goto discard;
-	}
-
-	child = tcp_check_req(meta_sk, skb, req, prev);
 	if (!child)
 		goto discard;
 
 	if (child != meta_sk) {
 		tcp_child_process(meta_sk, child, skb);
 	} else {
+		if (tcp_hdr(skb)->syn) {
+			struct mp_join *join_opt = mptcp_find_join(skb);
+			/* Currently we make two calls to mptcp_find_join(). This
+			 * can probably be optimized. */
+			if (mptcp_v4_add_raddress(&mpcb->rx_opt,
+					(struct in_addr *)&ip_hdr(skb)->saddr, 0,
+					join_opt->addr_id) < 0)
+				goto reset_and_discard;
+			if (mpcb->rx_opt.list_rcvd)
+				mpcb->rx_opt.list_rcvd = 0;
+
+			mptcp_v4_join_request(mpcb, skb);
+			goto discard;
+		}
 		goto reset_and_discard;
 	}
 	return 0;
@@ -360,43 +351,37 @@ discard:
 }
 
 /**
- * Inspired from inet_csk_search_req
  * After this, the ref count of the meta_sk associated with the request_sock
  * is incremented. Thus it is the responsibility of the caller
  * to call sock_put() when the reference is not needed anymore.
  */
-struct request_sock *mptcp_v4_search_req(const __be16 rport, const __be32 raddr,
-					 const __be32 laddr)
+struct sock *mptcp_v4_search_req(const __be16 rport, const __be32 raddr,
+				 const __be32 laddr)
 {
 	struct mptcp_request_sock *mtreq;
-	int found = 0;
+	struct sock *meta_sk = NULL;
 
 	spin_lock(&mptcp_reqsk_hlock);
 	list_for_each_entry(mtreq,
-			    &mptcp_reqsk_htb[inet_synq_hash
-					(raddr, rport, 0, MPTCP_HASH_SIZE)],
+			    &mptcp_reqsk_htb[inet_synq_hash(raddr, rport, 0,
+					    	    	    MPTCP_HASH_SIZE)],
 			    collide_tuple) {
-		struct request_sock *req = rev_mptcp_rsk(mtreq);
-		const struct inet_request_sock *ireq = inet_rsk(req);
+		const struct inet_request_sock *ireq = inet_rsk(rev_mptcp_rsk(mtreq));
 
 		if (ireq->rmt_port == rport &&
 		    ireq->rmt_addr == raddr &&
 		    ireq->loc_addr == laddr &&
-		    AF_INET_FAMILY(req->rsk_ops->family)) {
-			WARN_ON(req->sk);
-			found = 1;
+		    AF_INET_FAMILY(rev_mptcp_rsk(mtreq)->rsk_ops->family)) {
+			meta_sk = mpcb_meta_sk(mtreq->mpcb);
 			break;
 		}
 	}
 
-	if (found)
-		sock_hold(mpcb_meta_sk(mtreq->mpcb));
+	if (meta_sk)
+		sock_hold(meta_sk);
 	spin_unlock(&mptcp_reqsk_hlock);
 
-	if (!found)
-		return NULL;
-
-	return rev_mptcp_rsk(mtreq);
+	return meta_sk;
 }
 
 /**
@@ -811,7 +796,7 @@ void mptcp_pm_addr4_event_handler(struct in_ifaddr *ifa, unsigned long event,
 	}
 
 	/* Not yet in address-list */
-	if (event == NETDEV_UP && netif_running(ifa->ifa_dev->dev)) {
+	if ((event == NETDEV_UP || event == NETDEV_CHANGE) && netif_running(ifa->ifa_dev->dev)) {
 		i = __mptcp_find_free_index(mpcb->loc4_bits, 0, mpcb->next_v4_index);
 		if (i < 0) {
 			mptcp_debug("MPTCP_PM: NETDEV_UP Reached max "

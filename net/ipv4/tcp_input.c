@@ -4513,13 +4513,8 @@ static void tcp_data_queue(struct sock *sk, struct sk_buff *skb)
 {
 	const struct tcphdr *th = tcp_hdr(skb);
 	struct tcp_sock *tp = tcp_sk(sk);
-	struct tcp_sock *meta_tp = tp;
-	struct mptcp_cb *mpcb = mpcb_from_tcpsock(tp);
 
 	int eaten = -1;
-
-	if (tp->mpc)
-		meta_tp = mpcb_meta_tp(mpcb);
 
 	/* If no data is present, but a data_fin is in the options, we still
 	 * have to call mptcp_queue_skb later on. */
@@ -5886,7 +5881,8 @@ cont_mptcp:
 			tp->rx_opt.tstamp_ok	   = 1;
 			tp->tcp_header_len =
 				sizeof(struct tcphdr) + TCPOLEN_TSTAMP_ALIGNED;
-			tp->advmss	    -= TCPOLEN_TSTAMP_ALIGNED;
+			if (!tp->mpc)
+				tp->advmss -= TCPOLEN_TSTAMP_ALIGNED;
 			tcp_store_ts_recent(tp);
 		} else {
 			tp->tcp_header_len = sizeof(struct tcphdr);
@@ -6194,7 +6190,7 @@ out_syn_sent:
 					tcp_init_wl(tp, TCP_SKB_CB(skb)->seq);
 				}
 
-				if (tp->rx_opt.tstamp_ok)
+				if (!tp->mpc && tp->rx_opt.tstamp_ok)
 					tp->advmss -= TCPOLEN_TSTAMP_ALIGNED;
 
 				/* Make sure socket is routed, for
