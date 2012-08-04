@@ -453,7 +453,7 @@ void mptcp_init4_subsockets(struct mptcp_cb *mpcb,
 		    ntohs(rem_in.sin_port));
 
 	/* Adds loose source routing to the socket via IP_OPTION */
-	//mptcp_v4_add_lsrr(sk, rem->addr);
+	mptcp_v4_add_lsrr(sk, rem->addr);
 
 	ret = sock.ops->bind(&sock, (struct sockaddr *)&loc_in, ulid_size);
 	if (ret < 0) {
