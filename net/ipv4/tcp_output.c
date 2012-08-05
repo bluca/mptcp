@@ -261,7 +261,7 @@ EXPORT_SYMBOL(tcp_select_initial_window);
 static u16 tcp_select_window(struct sock *sk)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
-	u32 cur_win = tcp_receive_window(tp);
+	u32 cur_win = tcp_receive_window(tp->mpc ? tcp_sk(mptcp_meta_sk(sk)) : tp);
 	u32 new_win = __tcp_select_window(sk);
 
 	/* Never shrink the offered window */
@@ -277,11 +277,12 @@ static u16 tcp_select_window(struct sock *sk)
 	}
 
 	if (tp->mpc) {
-		mptcp_select_window(tp, new_win);
-	} else {
-		tp->rcv_wnd = new_win;
-		tp->rcv_wup = tp->rcv_nxt;
+		mpcb_meta_tp(tp->mpcb)->rcv_wnd = new_win;
+		mpcb_meta_tp(tp->mpcb)->rcv_wup = mpcb_meta_tp(tp->mpcb)->rcv_nxt;
 	}
+
+	tp->rcv_wnd = new_win;
+	tp->rcv_wup = tp->rcv_nxt;
 
 	/* Make sure we do not exceed the maximum possible
 	 * scaled window.

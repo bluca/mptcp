@@ -686,7 +686,6 @@ int mptcp_check_req_master(struct sock *sk, struct sock *child,
 			   struct multipath_options *mopt);
 struct sock *mptcp_check_req_child(struct sock *sk, struct sock *child,
 		struct request_sock *req, struct request_sock **prev);
-void mptcp_select_window(struct tcp_sock *tp, u32 new_win);
 u32 __mptcp_select_window(struct sock *sk);
 int mptcp_data_ack(struct sock *sk, const struct sk_buff *skb);
 void mptcp_key_sha1(u64 key, u32 *token, u64 *idsn);
@@ -961,6 +960,11 @@ static inline int mptcp_check_snd_buf(struct tcp_sock *tp)
 static inline int mptcp_sk_can_send(const struct sock *sk)
 {
 	return (1 << sk->sk_state) & (TCPF_ESTABLISHED | TCPF_CLOSE_WAIT);
+}
+
+static inline int mptcp_sk_can_recv(const struct sock *sk)
+{
+	return (1 << sk->sk_state) & (TCPF_ESTABLISHED | TCP_FIN_WAIT1 | TCP_FIN_WAIT2);
 }
 
 static inline void mptcp_retransmit_queue(struct sock *sk)
@@ -1290,7 +1294,6 @@ static inline struct sock *mptcp_check_req_child(const struct sock *sk,
 {
 	return 0;
 }
-static inline void mptcp_select_window(const struct tcp_sock *tp, u32 new_win) {}
 static inline u32 __mptcp_select_window(const struct sock *sk)
 {
 	return 0;

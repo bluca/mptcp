@@ -46,6 +46,14 @@ static int mptcp_is_available(struct sock *sk, struct sk_buff *skb)
 	    inet_csk(sk)->icsk_ca_state == TCP_CA_Loss)
 		return 0;
 
+	/* Don't send on this subflow if we bypass the allowed send-window at
+	 * the per-subflow level. Similar to tcp_snd_wnd_test, but manually
+	 * calculated end_seq (because here at this point end_seq is still at
+	 * the meta-level).
+	 */
+	if (skb && after(tp->write_seq + skb->len, tcp_wnd_end(tp)))
+		return 0;
+
 	return tcp_cwnd_test(tp, skb);
 }
 
@@ -276,7 +284,7 @@ void mptcp_reinject_data(struct sock *sk, int clone_it)
 
 	skb_queue_walk_safe(&sk->sk_write_queue, skb_it, tmp) {
 		struct tcp_skb_cb *tcb = TCP_SKB_CB(skb_it);
-		/* seq > reinjected_seq , to avoid reinjecting several times
+		/* seq >= reinjected_seq , to avoid reinjecting several times
 		 * the same segment. This does not duplicate functionality with
 		 * TCP_SKB_CB(skb)->path_mask, because the path_mask ensures the skb is not
 		 * scheduled twice to the same subflow. OTOH, the seq
@@ -1505,20 +1513,3 @@ void mptcp_send_reset(struct sock *sk, struct sk_buff *skb)
 		tcp_v6_send_reset(sk, skb);
 #endif
 }
-
-void mptcp_select_window(struct tcp_sock *tp, u32 new_win)
-{
-	struct tcp_sock *meta_tp = mpcb_meta_tp(tp->mpcb), *tmp_tp;
-	meta_tp->rcv_wnd = new_win;
-	meta_tp->rcv_wup = meta_tp->rcv_nxt;
-
-	/* The receive-window is the same for all the subflows */
-	mptcp_for_each_tp(tp->mpcb, tmp_tp) {
-		tmp_tp->rcv_wnd = new_win;
-	}
-	/* the subsock rcv_wup must still be updated,
-	 * because it is used to decide when to echo the timestamp
-	 * and when to delay the acks */
-	tp->rcv_wup = tp->rcv_nxt;
-}
-
