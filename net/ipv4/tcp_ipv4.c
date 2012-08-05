@@ -1526,18 +1526,19 @@ struct sock *tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	newinet->inet_saddr	      = ireq->loc_addr;
 	inet_opt	      = ireq->opt;
 	rcu_assign_pointer(newinet->inet_opt, inet_opt);
-	printk(KERN_DEBUG "newinet->inet_opt %d\n",newinet->inet_opt->opt.faddr);
-	/*printk(KERN_DEBUG "newinet->inet_opt %d %d %c %40s\n",
-			newinet->inet_opt->opt.faddr,
-			newinet->inet_opt->opt.nexthop,
-			newinet->inet_opt->opt.srr,
-			newinet->inet_opt->opt.__data);*/
 	ireq->opt	      = NULL;
 	newinet->mc_index     = inet_iif(skb);
 	newinet->mc_ttl	      = ip_hdr(skb)->ttl;
 	inet_csk(newsk)->icsk_ext_hdr_len = 0;
-	if (inet_opt)
+	if (inet_opt) {
 		inet_csk(newsk)->icsk_ext_hdr_len = inet_opt->opt.optlen;
+		printk(KERN_DEBUG "newinet->inet_opt %d %d %d %d\n",
+				inet_opt->opt.faddr,
+				inet_opt->opt.nexthop,
+				inet_opt->opt.srr,
+				inet_opt->opt.optlen
+				);//%40sinet_opt->opt.__data
+	}
 	newinet->inet_id = newtp->write_seq ^ jiffies;
 
 	if (!dst && (dst = inet_csk_route_child_sock(sk, newsk, req)) == NULL)
