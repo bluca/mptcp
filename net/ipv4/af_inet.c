@@ -1213,8 +1213,10 @@ int inet_sk_rebuild_header(struct sock *sk)
 	rcu_read_lock();
 	inet_opt = rcu_dereference(inet->inet_opt);
 	daddr = inet->inet_daddr;
-	if (inet_opt && inet_opt->opt.srr)
+	if (inet_opt && inet_opt->opt.srr) {
+		dump_stack();
 		daddr = inet_opt->opt.faddr;
+	}
 	rcu_read_unlock();
 	fl4 = &inet->cork.fl.u.ip4;
 	rt = ip_route_output_ports(sock_net(sk), fl4, sk, daddr, inet->inet_saddr,
