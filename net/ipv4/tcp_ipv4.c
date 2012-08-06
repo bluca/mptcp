@@ -1532,7 +1532,7 @@ struct sock *tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	inet_csk(newsk)->icsk_ext_hdr_len = 0;
 	if (inet_opt) {
 		inet_csk(newsk)->icsk_ext_hdr_len = inet_opt->opt.optlen;
-		printk(KERN_DEBUG "newinet->inet_opt %d %d %d %d\n",
+		printk(KERN_DEBUG "newinet->inet_opt %lu %lu %d %d\n",
 				inet_opt->opt.faddr,
 				inet_opt->opt.nexthop,
 				inet_opt->opt.srr,
