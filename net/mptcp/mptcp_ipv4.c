@@ -43,7 +43,6 @@
 #include <net/request_sock.h>
 #include <net/tcp.h>
 
-<<<<<<< HEAD
 #include <linux/route.h>
 #include <linux/mroute.h>
 #include <net/inet_ecn.h>
@@ -60,8 +59,6 @@
 #define AF_INET_FAMILY(fam) 1
 #endif
 
-=======
->>>>>>> refs/remotes/upstream/mptcp_trunk
 struct proto mptcp_prot = {
 	.name			= "MPTCP",
 	.owner			= THIS_MODULE,
