@@ -598,6 +598,7 @@ static void mptcp_dad_callback(unsigned long arg)
 		add_timer(&data->timer);
 	} else {
 		mptcp_pm_inet6_addr_event(NULL, NETDEV_UP, data->ifa);
+		in6_ifa_put(data->ifa);
 		kfree(data);
 	}
 }
@@ -614,6 +615,7 @@ static inline void mptcp_dad_setup_timer(struct inet6_ifaddr *ifa)
 	init_timer(&data->timer);
 	mptcp_dad_init_timer(data, ifa);
 	add_timer(&data->timer);
+	in6_ifa_hold(ifa);
 }
 
 /**
@@ -662,7 +664,7 @@ static int mptcp_pm_v6_netdev_event(struct notifier_block *this,
 }
 
 void mptcp_pm_addr6_event_handler(struct inet6_ifaddr *ifa, unsigned long event,
-		struct mptcp_cb *mpcb)
+				  struct mptcp_cb *mpcb)
 {
 	int i;
 	struct sock *sk;
@@ -741,7 +743,6 @@ found:
 		mptcp_for_each_bit_set(mpcb->rx_opt.rem6_bits, i)
 			mpcb->rx_opt.addr6[i].bitfield &= mpcb->loc6_bits;
 	}
-
 }
 
 /*

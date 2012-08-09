@@ -43,6 +43,7 @@
 #include <net/request_sock.h>
 #include <net/tcp.h>
 
+<<<<<<< HEAD
 #include <linux/route.h>
 #include <linux/mroute.h>
 #include <net/inet_ecn.h>
@@ -59,6 +60,8 @@
 #define AF_INET_FAMILY(fam) 1
 #endif
 
+=======
+>>>>>>> refs/remotes/upstream/mptcp_trunk
 struct proto mptcp_prot = {
 	.name			= "MPTCP",
 	.owner			= THIS_MODULE,
@@ -368,7 +371,7 @@ struct sock *mptcp_v4_search_req(const __be16 rport, const __be32 raddr,
 		if (ireq->rmt_port == rport &&
 		    ireq->rmt_addr == raddr &&
 		    ireq->loc_addr == laddr &&
-		    AF_INET_FAMILY(rev_mptcp_rsk(mtreq)->rsk_ops->family)) {
+		    rev_mptcp_rsk(mtreq)->rsk_ops->family == AF_INET) {
 			meta_sk = mpcb_meta_sk(mtreq->mpcb);
 			break;
 		}
