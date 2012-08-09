@@ -615,6 +615,7 @@ static inline void mptcp_dad_setup_timer(struct inet6_ifaddr *ifa)
 	init_timer(&data->timer);
 	mptcp_dad_init_timer(data, ifa);
 	add_timer(&data->timer);
+	in6_ifa_hold(ifa);
 }
 
 /**
