@@ -494,8 +494,8 @@ void mptcp_v4_add_lsrr(struct sock * sk, struct in_addr rem)
 	char * opt = NULL;
 	struct tcp_sock * tp = tcp_sk(sk);
 
-	if (sysctl_mptcp_ndiffports <= 1)
-		return;
+	//if (sysctl_mptcp_ndiffports <= 1)
+	//	return;
 
 	read_lock(&mptcp_gws_lock);
 
