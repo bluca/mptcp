@@ -610,10 +610,10 @@ static inline int mptcp_sysctl_mss(void)
 
 /* Iterates over all bit set to 1 in a bitset */
 #define mptcp_for_each_bit_set(b, i)					\
-	for (i = __ffs(b); b >> i; i += __ffs(b >> (i + 1)) + 1)
+	for (i = ffs(b) - 1; i >= 0; i = ffs(b >> (i + 1) << (i + 1)) - 1)
 
 #define mptcp_for_each_bit_unset(b, i)					\
-	for (i = ffz(b); i < sizeof(b) * 8; i += ffz(b >> (i + 1)) + 1)
+	mptcp_for_each_bit_set(~b, i)
 
 /**
  * Returns 1 if any subflow meets the condition @cond,
@@ -1123,7 +1123,8 @@ static inline int mptcp_find_free_index(u8 bitfield)
 /* Find the first index whose bit in the bit-field == 0 */
 static inline u8 mptcp_set_new_pathindex(struct mptcp_cb *mpcb)
 {
-	u8 i, base = mpcb->next_path_index;
+	u8 base = mpcb->next_path_index;
+	int i;
 
 	/* Start at 2, because index 1 is for the initial subflow  plus the
 	 * bitshift, to make the path-index increasing
@@ -1236,6 +1237,7 @@ static inline int mptcp_queue_skb(const struct sock *sk,
 {
 	return 0;
 }
+static inline void mptcp_purge_ofo_queue(struct tcp_sock *meta_tp) {}
 static inline void mptcp_cleanup_rbuf(const struct sock *meta_sk, int copied) {}
 static inline void mptcp_del_sock(const struct sock *sk) {}
 static inline void mptcp_update_metasocket(const struct sock *sock,
@@ -1267,6 +1269,8 @@ static inline void mptcp_parse_options(const uint8_t *ptr, const int opsize,
 				       const struct tcp_options_received *opt_rx,
 				       const struct multipath_options *mopt,
 				       const struct sk_buff *skb) {}
+static inline void mptcp_post_parse_options(struct tcp_sock *tp,
+					    const struct sk_buff *skb) {}
 static inline void mptcp_syn_options(struct sock *sk,
 				     struct tcp_out_options *opts,
 				     unsigned *remaining) {}
