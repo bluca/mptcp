@@ -1204,22 +1204,7 @@ int inet_sk_rebuild_header(struct sock *sk)
 	struct ip_options_rcu *inet_opt;
 	struct flowi4 *fl4;
 	int err;
-	if (inet_csk(sk)->icsk_inet.inet_opt) {
-			printk(KERN_DEBUG "reb 0 %pI4 %pI4 %d %d\n",
-					&inet_csk(sk)->icsk_inet.inet_opt->opt.faddr,
-					&inet_csk(sk)->icsk_inet.inet_opt->opt.nexthop,
-					inet_csk(sk)->icsk_inet.inet_opt->opt.srr,
-					inet_csk(sk)->icsk_inet.inet_opt->opt.optlen
-					);//%40sinet_opt->opt.__data inet_csk(newsk)->icsk_inet->inet_opt
-		}
-	if (inet_csk(sk)->icsk_inet.cork.base.opt) {
-				printk(KERN_DEBUG "reb 1 %pI4 %pI4 %d %d\n",
-						&inet_csk(sk)->icsk_inet.cork.base.opt->faddr,
-						&inet_csk(sk)->icsk_inet.cork.base.opt->nexthop,
-						inet_csk(sk)->icsk_inet.cork.base.opt->srr,
-						inet_csk(sk)->icsk_inet.cork.base.opt->optlen
-						);//%40sinet_opt->opt.__data inet_csk(newsk)->icsk_inet->inet_opt
-			}
+
 	/* Route is OK, nothing to do. */
 	if (rt && sk->sk_state != TCP_SYN_RECV) //tp->mptcp->fully_established
 		return 0;
