@@ -1533,12 +1533,12 @@ struct sock *tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	inet_csk(newsk)->icsk_ext_hdr_len = 0;
 	if (inet_opt) {
 		inet_csk(newsk)->icsk_ext_hdr_len = inet_opt->opt.optlen;
-		printk(KERN_DEBUG "newinet->inet_opt %pI4 %pI4 %d %d\n",
-				&inet_opt->opt.faddr,
-				&inet_opt->opt.nexthop,
-				inet_opt->opt.srr,
-				inet_opt->opt.optlen
-				);//%40sinet_opt->opt.__data
+		printk(KERN_DEBUG "sync recv  1 %pI4 %pI4 %d %d\n",
+				&inet_csk(newsk)->icsk_inet.inet_opt->opt.faddr,
+				&inet_csk(newsk)->icsk_inet.inet_opt->opt.nexthop,
+				inet_csk(newsk)->icsk_inet.inet_opt->opt.srr,
+				inet_csk(newsk)->icsk_inet.inet_opt->opt.optlen
+				);//%40sinet_opt->opt.__data inet_csk(newsk)->icsk_inet->inet_opt
 	}
 	newinet->inet_id = newtp->write_seq ^ jiffies;
 
@@ -1581,6 +1581,23 @@ struct sock *tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	if (__inet_inherit_port(sk, newsk) < 0)
 		goto put_and_exit;
 	__inet_hash_nolisten(newsk, NULL);
+
+	if (inet_csk(newsk)->icsk_inet.inet_opt) {
+		printk(KERN_DEBUG "sync recv  2 %pI4 %pI4 %d %d\n",
+				&inet_csk(newsk)->icsk_inet.inet_opt->opt.faddr,
+				&inet_csk(newsk)->icsk_inet.inet_opt->opt.nexthop,
+				inet_csk(newsk)->icsk_inet.inet_opt->opt.srr,
+				inet_csk(newsk)->icsk_inet.inet_opt->opt.optlen
+				);//%40sinet_opt->opt.__data inet_csk(newsk)->icsk_inet->inet_opt
+	}
+	if (inet_csk(newsk)->icsk_inet.cork.base.opt) {
+		printk(KERN_DEBUG "sync recv 3 %pI4 %pI4 %d %d\n",
+				&inet_csk(newsk)->icsk_inet.cork.base.opt->faddr,
+				&inet_csk(newsk)->icsk_inet.cork.base.opt->nexthop,
+				inet_csk(newsk)->icsk_inet.cork.base.opt->srr,
+				inet_csk(newsk)->icsk_inet.cork.base.opt->optlen
+				);//%40sinet_opt->opt.__data inet_csk(newsk)->icsk_inet->inet_opt
+	}
 
 	return newsk;
 

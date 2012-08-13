@@ -880,6 +880,22 @@ int tcp_child_process(struct sock *parent, struct sock *child,
 	struct sock *meta_sk = tcp_sk(child)->mpc ? mptcp_meta_sk(child) : child;
 
 	if (!sock_owned_by_user(meta_sk)) {
+		if (inet_csk(child)->icsk_inet.inet_opt) {
+				printk(KERN_DEBUG "tcp_child_proc 0 %pI4 %pI4 %d %d\n",
+						&inet_csk(child)->icsk_inet.inet_opt->opt.faddr,
+						&inet_csk(child)->icsk_inet.inet_opt->opt.nexthop,
+						inet_csk(child)->icsk_inet.inet_opt->opt.srr,
+						inet_csk(child)->icsk_inet.inet_opt->opt.optlen
+						);//%40sinet_opt->opt.__data inet_csk(newsk)->icsk_inet->inet_opt
+			}
+		if (inet_csk(child)->icsk_inet.cork.base.opt) {
+					printk(KERN_DEBUG "tcp_child_proc 1 %pI4 %pI4 %d %d\n",
+							&inet_csk(child)->icsk_inet.cork.base.opt->faddr,
+							&inet_csk(child)->icsk_inet.cork.base.opt->nexthop,
+							inet_csk(child)->icsk_inet.cork.base.opt->srr,
+							inet_csk(child)->icsk_inet.cork.base.opt->optlen
+							);//%40sinet_opt->opt.__data inet_csk(newsk)->icsk_inet->inet_opt
+				}
 		ret = tcp_rcv_state_process(child, skb, tcp_hdr(skb),
 					    skb->len);
 		/* Wakeup parent, send SIGIO */

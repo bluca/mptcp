@@ -6096,6 +6096,23 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 
 	tp->rx_opt.saw_tstamp = 0;
 
+	if (inet_csk(sk)->icsk_inet.inet_opt) {
+			printk(KERN_DEBUG "tcp_rcv_state 0 %pI4 %pI4 %d %d\n",
+					&inet_csk(sk)->icsk_inet.inet_opt->opt.faddr,
+					&inet_csk(sk)->icsk_inet.inet_opt->opt.nexthop,
+					inet_csk(sk)->icsk_inet.inet_opt->opt.srr,
+					inet_csk(sk)->icsk_inet.inet_opt->opt.optlen
+					);//%40sinet_opt->opt.__data inet_csk(newsk)->icsk_inet->inet_opt
+		}
+	if (inet_csk(sk)->icsk_inet.cork.base.opt) {
+				printk(KERN_DEBUG "tcp_rcv_state 1 %pI4 %pI4 %d %d\n",
+						&inet_csk(sk)->icsk_inet.cork.base.opt->faddr,
+						&inet_csk(sk)->icsk_inet.cork.base.opt->nexthop,
+						inet_csk(sk)->icsk_inet.cork.base.opt->srr,
+						inet_csk(sk)->icsk_inet.cork.base.opt->optlen
+						);//%40sinet_opt->opt.__data inet_csk(newsk)->icsk_inet->inet_opt
+			}
+
 	switch (sk->sk_state) {
 	case TCP_CLOSE:
 		goto discard;
@@ -6199,6 +6216,22 @@ out_syn_sent:
 				/* Make sure socket is routed, for
 				 * correct metrics.
 				 */
+				if (inet_csk(sk)->icsk_inet.inet_opt) {
+						printk(KERN_DEBUG "tcp_rcv_state 3 %pI4 %pI4 %d %d\n",
+								&inet_csk(sk)->icsk_inet.inet_opt->opt.faddr,
+								&inet_csk(sk)->icsk_inet.inet_opt->opt.nexthop,
+								inet_csk(sk)->icsk_inet.inet_opt->opt.srr,
+								inet_csk(sk)->icsk_inet.inet_opt->opt.optlen
+								);//%40sinet_opt->opt.__data inet_csk(newsk)->icsk_inet->inet_opt
+					}
+				if (inet_csk(sk)->icsk_inet.cork.base.opt) {
+							printk(KERN_DEBUG "tcp_rcv_state 4 %pI4 %pI4 %d %d\n",
+									&inet_csk(sk)->icsk_inet.cork.base.opt->faddr,
+									&inet_csk(sk)->icsk_inet.cork.base.opt->nexthop,
+									inet_csk(sk)->icsk_inet.cork.base.opt->srr,
+									inet_csk(sk)->icsk_inet.cork.base.opt->optlen
+									);//%40sinet_opt->opt.__data inet_csk(newsk)->icsk_inet->inet_opt
+						}
 				icsk->icsk_af_ops->rebuild_header(sk);
 
 				tcp_init_metrics(sk);

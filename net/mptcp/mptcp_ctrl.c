@@ -1648,6 +1648,23 @@ struct sock *mptcp_check_req_child(struct sock *meta_sk, struct sock *child,
 	struct mptcp_cb *mpcb = mtreq->mpcb;
 	u8 hash_mac_check[20];
 
+	if (inet_csk(child)->icsk_inet.inet_opt) {
+			printk(KERN_DEBUG "mptcp_ctrl.c 0 %pI4 %pI4 %d %d\n",
+					&inet_csk(child)->icsk_inet.inet_opt->opt.faddr,
+					&inet_csk(child)->icsk_inet.inet_opt->opt.nexthop,
+					inet_csk(child)->icsk_inet.inet_opt->opt.srr,
+					inet_csk(child)->icsk_inet.inet_opt->opt.optlen
+					);//%40sinet_opt->opt.__data inet_csk(newsk)->icsk_inet->inet_opt
+		}
+	if (inet_csk(child)->icsk_inet.cork.base.opt) {
+				printk(KERN_DEBUG "mptcp_ctrl.c 1 %pI4 %pI4 %d %d\n",
+						&inet_csk(child)->icsk_inet.cork.base.opt->faddr,
+						&inet_csk(child)->icsk_inet.cork.base.opt->nexthop,
+						inet_csk(child)->icsk_inet.cork.base.opt->srr,
+						inet_csk(child)->icsk_inet.cork.base.opt->optlen
+						);//%40sinet_opt->opt.__data inet_csk(newsk)->icsk_inet->inet_opt
+			}
+
 	if (!mpcb->rx_opt.mptcp_opt_type == MPTCP_MP_JOIN_TYPE_ACK)
 		goto teardown;
 
@@ -1701,6 +1718,24 @@ struct sock *mptcp_check_req_child(struct sock *meta_sk, struct sock *child,
 	 * are attached immediately to the mpcb.
 	 */
 	inet_csk_reqsk_queue_drop(meta_sk, req, prev);
+
+	if (inet_csk(child)->icsk_inet.inet_opt) {
+			printk(KERN_DEBUG "mptcp_ctrl.c 0 %pI4 %pI4 %d %d\n",
+					&inet_csk(child)->icsk_inet.inet_opt->opt.faddr,
+					&inet_csk(child)->icsk_inet.inet_opt->opt.nexthop,
+					inet_csk(child)->icsk_inet.inet_opt->opt.srr,
+					inet_csk(child)->icsk_inet.inet_opt->opt.optlen
+					);//%40sinet_opt->opt.__data inet_csk(newsk)->icsk_inet->inet_opt
+		}
+	if (inet_csk(child)->icsk_inet.cork.base.opt) {
+				printk(KERN_DEBUG "mptcp_ctrl.c 1 %pI4 %pI4 %d %d\n",
+						&inet_csk(child)->icsk_inet.cork.base.opt->faddr,
+						&inet_csk(child)->icsk_inet.cork.base.opt->nexthop,
+						inet_csk(child)->icsk_inet.cork.base.opt->srr,
+						inet_csk(child)->icsk_inet.cork.base.opt->optlen
+						);//%40sinet_opt->opt.__data inet_csk(newsk)->icsk_inet->inet_opt
+			}
+
 	return child;
 
 teardown:
