@@ -1221,8 +1221,8 @@ int inet_sk_rebuild_header(struct sock *sk)
 						);//%40sinet_opt->opt.__data inet_csk(newsk)->icsk_inet->inet_opt
 			}
 	/* Route is OK, nothing to do. */
-	//if (rt)
-	//	return 0;
+	if (rt && sk->sk_state != TCP_SYN_RECV) //tp->mptcp->fully_established
+		return 0;
 
 	/* Reroute. */
 	rcu_read_lock();
