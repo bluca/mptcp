@@ -399,6 +399,16 @@ struct dst_entry *inet_csk_route_child_sock(struct sock *sk,
 			   ireq->loc_addr, ireq->rmt_port, inet_sk(sk)->inet_sport);
 	security_req_classify_flow(req, flowi4_to_flowi(fl4));
 	rt = ip_route_output_flow(net, fl4, sk);
+
+	if (opt) {
+			printk(KERN_DEBUG "route child 2 %pI4\n",
+					&fl4->daddr
+					);//%40sinet_opt->opt.__data inet_csk(newsk)->icsk_inet->inet_opt
+		} else {
+			printk(KERN_DEBUG "NO OPT route child 2 %pI4\n",
+								&fl4->daddr);
+		}
+
 	if (IS_ERR(rt))
 		goto no_route;
 	if (opt && opt->opt.is_strictroute && fl4->daddr != rt->rt_gateway)

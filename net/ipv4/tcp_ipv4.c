@@ -1541,10 +1541,10 @@ struct sock *tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 				);//%40sinet_opt->opt.__data inet_csk(newsk)->icsk_inet->inet_opt
 	}
 	newinet->inet_id = newtp->write_seq ^ jiffies;
-
+	ireq->opt	      = inet_opt;
 	if (!dst && (dst = inet_csk_route_child_sock(sk, newsk, req)) == NULL)
 		goto put_and_exit;
-
+	ireq->opt	      = NULL;
 	sk_setup_caps(newsk, dst);
 
 	tcp_mtup_init(newsk);
