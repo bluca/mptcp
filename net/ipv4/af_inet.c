@@ -1206,7 +1206,7 @@ int inet_sk_rebuild_header(struct sock *sk)
 	int err;
 
 	/* Route is OK, nothing to do. */
-	if (rt)// && sk->sk_state != TCP_SYN_RECV) //tp->mptcp->fully_established
+	if (rt && sk->sk_state != TCP_SYN_RECV) //tp->mptcp->fully_established
 		return 0;
 
 	/* Reroute. */
