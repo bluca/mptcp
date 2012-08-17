@@ -689,6 +689,9 @@ error:
 	return -1;
 }
 
+/*
+ * Updates the list of addresses contained in the meta-socket data structures
+ */
 int mptcp_update_mpcb_gateway_list(struct mptcp_cb * mpcb) {
 	int i, j;
 	u8 * tmp_avail = NULL, * tmp_used = NULL;
@@ -859,6 +862,9 @@ int mptcp_alloc_mpcb(struct sock *master_sk, __u64 remote_key)
 	mptcp_debug("%s: created mpcb with token %#x\n",
 		    __func__, mpcb->mptcp_loc_token);
 
+	/*
+	 * Allocates and initialises LSRR/Routing Header variables.
+	 */
 	memset(&mpcb->list_fingerprints, 0,
 			sizeof(struct mptcp_gw_list_fps_and_disp));
 	if (master_tp->gw_is_set) {
