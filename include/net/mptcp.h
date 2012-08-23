@@ -729,7 +729,14 @@ static inline int mptcp_skb_cloned(const struct sk_buff *skb,
 {
 	/* If it does not has a DSS-mapping (MPTCPHDR_SEQ), it does not come
 	 * from the meta-level send-queue and thus dataref is as usual.
-	 * If it has a DSS-mapping dataref is at least 2
+	 * If it has a DSS-mapping dataref is 2, if we are coming straight from
+	 * the meta-send-queue.
+	 * It is 1, if we took the segment from a pskb_copy'd segment of the
+	 * reinject-queue.
+	 *
+	 * It will be > 2, if the segment is also referenced at another place.
+	 * E.g., an rbuf-opti reinjection is held in the meta-queue, subflow-queue
+	 * and in the queue of the new subflow.
 	 */
 	return tp->mpc &&
 	       ((!mptcp_is_data_seq(skb) && skb_cloned(skb)) ||
@@ -933,7 +940,7 @@ static inline void mptcp_check_rcvseq_wrap(struct tcp_sock *meta_tp, int inc)
 
 static inline void mptcp_path_array_check(struct mptcp_cb *mpcb)
 {
-	if (unlikely(mpcb && mpcb->rx_opt.list_rcvd)) {
+	if (unlikely(mpcb->rx_opt.list_rcvd)) {
 		mpcb->rx_opt.list_rcvd = 0;
 		mptcp_send_updatenotif(mpcb);
 	}
@@ -1043,15 +1050,10 @@ static inline int mptcp_fallback_infinite(struct tcp_sock *tp,
 	return 0;
 }
 
-static inline void mptcp_mp_fail_rcvd(struct mptcp_cb *mpcb,
-				      struct sock *sk, struct tcphdr *th)
+static inline int mptcp_mp_fail_rcvd(struct mptcp_cb *mpcb, struct sock *sk,
+				     struct tcphdr *th)
 {
-	struct sock *meta_sk;
-
-	if (!mpcb)
-		return;
-
-	meta_sk = mpcb_meta_sk(mpcb);
+	struct sock *meta_sk = mpcb_meta_sk(mpcb);
 
 	if (unlikely(mpcb->rx_opt.mp_fail)) {
 		mpcb->rx_opt.mp_fail = 0;
@@ -1065,6 +1067,8 @@ static inline void mptcp_mp_fail_rcvd(struct mptcp_cb *mpcb,
 			 * it is as if no packets are in flight */
 			tcp_sk(meta_sk)->packets_out = 0;
 		}
+
+		return 0;
 	}
 
 	if (unlikely(mpcb->rx_opt.mp_fclose)) {
@@ -1078,10 +1082,6 @@ static inline void mptcp_mp_fail_rcvd(struct mptcp_cb *mpcb,
 		else
 			tcp_sk(sk)->mp_killed = 1;
 
-		/* Set rst-bit and the socket will be tcp_done'd by
-		 * tcp_validate_incoming */
-		th->rst = 1;
-
 		mptcp_for_each_sk_safe(mpcb, sk_it, sk_tmp) {
 			if (sk_it == sk)
 				continue;
@@ -1090,7 +1090,11 @@ static inline void mptcp_mp_fail_rcvd(struct mptcp_cb *mpcb,
 		}
 
 		tcp_reset(meta_sk);
+
+		return 1;
 	}
+
+	return 0;
 }
 
 /* Find the first free index in the bitfield */
@@ -1318,9 +1322,12 @@ static inline int mptcp_fallback_infinite(const struct tcp_sock *tp,
 {
 	return 0;
 }
-static inline void mptcp_mp_fail_rcvd(const struct mptcp_cb *mpcb,
-				      const struct sock *sk,
-				      const struct tcphdr *th) {}
+static inline int mptcp_mp_fail_rcvd(const struct mptcp_cb *mpcb,
+				     const struct sock *sk,
+				     const struct tcphdr *th)
+{
+	return 0;
+}
 static inline void mptcp_init_mp_opt(const struct multipath_options *mopt) {}
 static inline void mptcp_wmem_free_skb(const struct sock *sk,
 				       const struct sk_buff *skb) {}
