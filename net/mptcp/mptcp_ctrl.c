@@ -60,6 +60,21 @@
 static struct kmem_cache *mptcp_sock_cache __read_mostly;
 static struct kmem_cache *mptcp_cb_cache __read_mostly;
 
+static int mptcp_reset_snmp(struct ctl_table *table, int write,
+			    void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	int i;
+
+	for (i = 1; i < __MPTCP_MIB_MAX; i++)
+		/* TODO - before pushing anything upstream, we have to iterate
+		 * over the available namespaces.
+		 */
+		MPTCP_RESET_STATS(&init_net, i);
+
+	return 0;
+}
+
+
 /* Sysctl data */
 
 #ifdef CONFIG_SYSCTL
@@ -70,6 +85,7 @@ int sysctl_mptcp_enabled __read_mostly = 1;
 int sysctl_mptcp_checksum __read_mostly = 1;
 int sysctl_mptcp_debug __read_mostly = 0;
 int sysctl_mptcp_syn_retries __read_mostly = MPTCP_SYN_RETRIES;
+int sysctl_mptcp_reset_snmp __read_mostly;
 EXPORT_SYMBOL(sysctl_mptcp_debug);
 
 static ctl_table mptcp_skeleton[] = {
@@ -114,6 +130,13 @@ static ctl_table mptcp_skeleton[] = {
 		.maxlen = sizeof(int),
 		.mode = 0644,
 		.proc_handler = &proc_dointvec
+	},
+	{
+		.procname = "mptcp_reset_snmp",
+		.data = &sysctl_mptcp_reset_snmp,
+		.maxlen = sizeof(int),
+		.mode = 0644,
+		.proc_handler = &mptcp_reset_snmp
 	},
 	{ }
 };
