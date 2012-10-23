@@ -541,6 +541,12 @@ extern struct workqueue_struct *mptcp_wq;
 			printk(KERN_DEBUG __FILE__ ": " fmt, ##args);	\
 	} while (0)
 
+#define MPTCP_INC_STATS(net, field)	SNMP_INC_STATS((net)->mib.mptcp_statistics, field)
+#define MPTCP_INC_STATS_BH(net, field)	SNMP_INC_STATS_BH((net)->mib.mptcp_statistics, field)
+#define MPTCP_DEC_STATS(net, field)	SNMP_DEC_STATS((net)->mib.mptcp_statistics, field)
+#define MPTCP_ADD_STATS_USER(net, field, val) SNMP_ADD_STATS_USER((net)->mib.mptcp_statistics, field, val)
+#define MPTCP_ADD_STATS(net, field, val)	SNMP_ADD_STATS((net)->mib.mptcp_statistics, field, val)
+
 static inline int mptcp_sysctl_mss(void)
 {
 	return sysctl_mptcp_mss;

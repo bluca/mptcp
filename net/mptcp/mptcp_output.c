@@ -293,6 +293,8 @@ void mptcp_reinject_data(struct sock *sk, int clone_it)
 	struct tcp_sock *tp = tcp_sk(sk);
 	struct sock *meta_sk = tp->meta_sk;
 
+	MPTCP_INC_STATS(sock_net(meta_sk), MPTCP_MIB_DATA_REINJECT);
+
 	skb_queue_walk_safe(&sk->sk_write_queue, skb_it, tmp) {
 		struct tcp_skb_cb *tcb = TCP_SKB_CB(skb_it);
 		/* Subflow syn's and fin's are not reinjected
@@ -706,6 +708,7 @@ static struct sk_buff *mptcp_rcv_buf_optimization(struct sock *sk, int penal)
 				tp_it->snd_cwnd = max(tp_it->snd_cwnd >> 1U, 1U);
 				tp_it->snd_ssthresh = max(tp_it->snd_cwnd, 2U);
 				tp_it->mptcp->last_rbuf_opti = tcp_time_stamp;
+				MPTCP_INC_STATS(sock_net(meta_sk), MPTCP_MIB_RBUF_CWND);
 			}
 			break;
 		}
@@ -726,6 +729,7 @@ retrans:
 
 				if (4 * tp->srtt >= tp_it->srtt) {
 					do_retrans = 0;
+					MPTCP_INC_STATS(sock_net(meta_sk), MPTCP_MIB_RBUF_NO_RTT);
 					break;
 				} else {
 					do_retrans = 1;
@@ -733,8 +737,10 @@ retrans:
 			}
 		}
 
-		if (do_retrans)
+		if (do_retrans) {
+			MPTCP_INC_STATS(sock_net(meta_sk), MPTCP_MIB_RBUF_REINJECT);
 			return skb_head;
+		}
 	}
 	return NULL;
 }
@@ -850,6 +856,7 @@ retry:
 		TCP_SKB_CB(subskb)->when = tcp_time_stamp;
 
 		if (unlikely(tcp_transmit_skb(subsk, subskb, 1, gfp))) {
+			MPTCP_INC_STATS(sock_net(meta_sk), MPTCP_MIB_BACKPRESSURE);
 			mptcp_transmit_skb_failed(subsk, skb, subskb, reinject);
 			mpcb->noneligible |= mptcp_pi_to_flag(subtp->mptcp->path_index);
 			continue;
@@ -1752,10 +1759,12 @@ void mptcp_retransmit_timer(struct sock *meta_sk)
 		if (!subskb)
 			goto out_reset_timer;
 		err = mptcp_retransmit_skb(sk, subskb);
-		if (!err)
+		if (!err) {
+			NET_INC_STATS(sock_net(meta_sk), MPTCP_MIB_META_RETR);
 			mptcp_sub_event_new_data_sent(sk, subskb);
-		else
+		} else {
 			mptcp_transmit_skb_failed(sk, tcp_write_queue_head(meta_sk), subskb, 0);
+		}
 		__sk_dst_reset(meta_sk);
 		goto out_reset_timer;
 	}
@@ -1764,7 +1773,7 @@ void mptcp_retransmit_timer(struct sock *meta_sk)
 		return;
 
 	if (meta_icsk->icsk_retransmits == 0)
-		NET_INC_STATS_BH(sock_net(meta_sk), LINUX_MIB_TCPTIMEOUTS);
+		NET_INC_STATS(sock_net(meta_sk), MPTCP_MIB_META_RTO);
 
 	subskb = mptcp_skb_entail(sk, tcp_write_queue_head(meta_sk), -1);
 	if (!subskb)
@@ -1781,10 +1790,12 @@ void mptcp_retransmit_timer(struct sock *meta_sk)
 					  TCP_RTO_MAX);
 		return;
 	}
-	if (!err)
+	if (!err) {
+		NET_INC_STATS(sock_net(meta_sk), MPTCP_MIB_META_RETR);
 		mptcp_sub_event_new_data_sent(sk, subskb);
-	else
+	} else {
 		mptcp_transmit_skb_failed(sk, tcp_write_queue_head(meta_sk), subskb, 0);
+	}
 
 	/* Increase the timeout each time we retransmit.  Note that
 	 * we do not increase the rtt estimate.  rto is initialized

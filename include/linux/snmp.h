@@ -148,6 +148,20 @@ enum
 	__UDP_MIB_MAX
 };
 
+/* mptcp mib definitions */
+enum
+{
+	MPTCP_MIB_NUM = 0,
+	MPTCP_MIB_BACKPRESSURE,			/* Backpressure on a subflow */
+	MPTCP_MIB_RBUF_REINJECT,		/* Rbuf-opti reinjection */
+	MPTCP_MIB_RBUF_NO_RTT,			/* Not reinject due to RTT */
+	MPTCP_MIB_RBUF_CWND,			/* Rbuf-opti congestion window reduction */
+	MPTCP_MIB_META_RETR,			/* meta-level retransmission of data (excluding data-fin */
+	MPTCP_MIB_META_RTO,			/* meta-level retrans. timeout */
+	MPTCP_MIB_DATA_REINJECT,		/* cross-subflow reinjection */
+	__MPTCP_MIB_MAX
+};
+
 /* linux mib definitions */
 enum
 {

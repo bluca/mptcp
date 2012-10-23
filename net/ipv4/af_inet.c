@@ -1567,6 +1567,10 @@ static const struct net_protocol icmp_protocol = {
 
 static __net_init int ipv4_mib_init_net(struct net *net)
 {
+	if (snmp_mib_init((void __percpu **)net->mib.mptcp_statistics,
+			  sizeof(struct mptcp_mib),
+			  __alignof__(struct mptcp_mib)) < 0)
+		goto err_mptcp_mib;
 	if (snmp_mib_init((void __percpu **)net->mib.tcp_statistics,
 			  sizeof(struct tcp_mib),
 			  __alignof__(struct tcp_mib)) < 0)
@@ -1612,6 +1616,8 @@ err_net_mib:
 err_ip_mib:
 	snmp_mib_free((void __percpu **)net->mib.tcp_statistics);
 err_tcp_mib:
+	snmp_mib_free((void __percpu **)net->mib.mptcp_statistics);
+err_mptcp_mib:
 	return -ENOMEM;
 }
 
@@ -1624,6 +1630,7 @@ static __net_exit void ipv4_mib_exit_net(struct net *net)
 	snmp_mib_free((void __percpu **)net->mib.net_statistics);
 	snmp_mib_free((void __percpu **)net->mib.ip_statistics);
 	snmp_mib_free((void __percpu **)net->mib.tcp_statistics);
+	snmp_mib_free((void __percpu **)net->mib.mptcp_statistics);
 }
 
 static __net_initdata struct pernet_operations ipv4_mib_ops = {

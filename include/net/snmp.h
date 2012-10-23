@@ -91,6 +91,11 @@ struct icmpv6msg_mib_device {
 	atomic_long_t	mibs[ICMP6MSG_MIB_MAX];
 };
 
+/* MPTCP */
+#define MPTCP_MIB_MAX	__MPTCP_MIB_MAX
+struct mptcp_mib {
+	unsigned long	mibs[MPTCP_MIB_MAX];
+};
 
 /* TCP */
 #define TCP_MIB_MAX	__TCP_MIB_MAX

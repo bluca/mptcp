@@ -146,6 +146,16 @@ static const struct {
 	{ NULL, 0 }
 };
 
+static const struct snmp_mib snmp4_mptcp_list[] = {
+	SNMP_MIB_ITEM("SubflowBackpressure", MPTCP_MIB_BACKPRESSURE),
+	SNMP_MIB_ITEM("RbufReinjection", MPTCP_MIB_RBUF_REINJECT),
+	SNMP_MIB_ITEM("RbufNoReinjRTT", MPTCP_MIB_RBUF_NO_RTT),
+	SNMP_MIB_ITEM("RbufCwndReduction", MPTCP_MIB_RBUF_CWND),
+	SNMP_MIB_ITEM("MetaRetransmit", MPTCP_MIB_META_RETR),
+	SNMP_MIB_ITEM("MetaRTO", MPTCP_MIB_META_RTO),
+	SNMP_MIB_ITEM("CrossReinject", MPTCP_MIB_DATA_REINJECT),
+	SNMP_MIB_SENTINEL
+};
 
 static const struct snmp_mib snmp4_tcp_list[] = {
 	SNMP_MIB_ITEM("RtoAlgorithm", TCP_MIB_RTOALGORITHM),
@@ -373,6 +383,16 @@ static int snmp_seq_show(struct seq_file *seq, void *v)
 				   snmp_fold_field((void __percpu **)net->mib.tcp_statistics,
 						   snmp4_tcp_list[i].entry));
 	}
+
+	seq_puts(seq, "\nMptcp:");
+	for (i = 0; snmp4_mptcp_list[i].name != NULL; i++)
+		seq_printf(seq, " %s", snmp4_mptcp_list[i].name);
+
+	seq_puts(seq, "\nMptcp:");
+	for (i = 0; snmp4_mptcp_list[i].name != NULL; i++)
+		seq_printf(seq, " %lu",
+			   snmp_fold_field((void __percpu **)net->mib.mptcp_statistics,
+					   snmp4_mptcp_list[i].entry));
 
 	seq_puts(seq, "\nUdp:");
 	for (i = 0; snmp4_udp_list[i].name != NULL; i++)
