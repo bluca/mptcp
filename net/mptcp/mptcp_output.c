@@ -293,8 +293,6 @@ void mptcp_reinject_data(struct sock *sk, int clone_it)
 	struct tcp_sock *tp = tcp_sk(sk);
 	struct sock *meta_sk = tp->meta_sk;
 
-	MPTCP_INC_STATS(sock_net(meta_sk), MPTCP_MIB_DATA_REINJECT);
-
 	skb_queue_walk_safe(&sk->sk_write_queue, skb_it, tmp) {
 		struct tcp_skb_cb *tcb = TCP_SKB_CB(skb_it);
 		/* Subflow syn's and fin's are not reinjected
@@ -306,6 +304,8 @@ void mptcp_reinject_data(struct sock *sk, int clone_it)
 		/* Go to next segment, if it failed */
 		if (__mptcp_reinject_data(skb_it, meta_sk, sk, clone_it))
 			continue;
+
+		MPTCP_INC_STATS(sock_net(meta_sk), MPTCP_MIB_DATA_REINJECT);
 	}
 
 	skb_it = tcp_write_queue_tail(meta_sk);
