@@ -154,8 +154,12 @@ struct linux_xfrm_mib {
 #define SNMP_ADD_STATS(mib, field, addend)	\
 			irqsafe_cpu_add(mib[0]->mibs[field], addend)
 
-#define SNMP_RESET_STATS(mib, field)	\
-			__this_cpu_write(mib[0]->mibs[field], 0)
+#define SNMP_RESET_STATS(mib, field)					\
+		do {							\
+			local_bh_disable();				\
+			__this_cpu_write(mib[0]->mibs[field], 0)	\
+			local_bh_enable();				\
+		} while (0)
 /*
  * Use "__typeof__(*mib[0]) *ptr" instead of "__typeof__(mib[0]) ptr"
  * to make @ptr a non-percpu pointer.
