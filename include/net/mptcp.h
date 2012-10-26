@@ -543,6 +543,8 @@ extern struct workqueue_struct *mptcp_wq;
 
 #define MPTCP_INC_STATS(net, field)	SNMP_INC_STATS((net)->mib.mptcp_statistics, field)
 #define MPTCP_RESET_STATS(net, field) SNMP_RESET_STATS((net)->mib.mptcp_statistics, field)
+#define TCP_RESET_STATS(net, field) SNMP_RESET_STATS((net)->mib.tcp_statistics, field)
+#define LINUX_RESET_STATS(net, field) SNMP_RESET_STATS((net)->mib.net_statistics, field)
 
 static inline int mptcp_sysctl_mss(void)
 {

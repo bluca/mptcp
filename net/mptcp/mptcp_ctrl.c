@@ -71,6 +71,12 @@ static int mptcp_reset_snmp(struct ctl_table *table, int write,
 		 */
 		MPTCP_RESET_STATS(&init_net, i);
 
+	for (i = 1; i < __TCP_MIB_MAX; i++)
+		TCP_RESET_STATS(&init_net, i);
+
+	for (i = 1; i < __LINUX_MIB_MAX; i++)
+		LINUX_RESET_STATS(&init_net, i);
+
 	return 0;
 }
 
