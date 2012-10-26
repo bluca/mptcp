@@ -157,7 +157,7 @@ struct linux_xfrm_mib {
 #define SNMP_RESET_STATS(mib, field)					\
 		do {							\
 			local_bh_disable();				\
-			__this_cpu_write(mib[0]->mibs[field], 0)	\
+			__this_cpu_write(mib[0]->mibs[field], 0);	\
 			local_bh_enable();				\
 		} while (0)
 /*
