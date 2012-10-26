@@ -63,7 +63,14 @@ static struct kmem_cache *mptcp_cb_cache __read_mostly;
 static int mptcp_reset_snmp(struct ctl_table *table, int write,
 			    void __user *buffer, size_t *lenp, loff_t *ppos)
 {
-	int i;
+	int i, val = 0;
+	ctl_table tlb = {
+		.data = &val,
+		.maxlen = sizeof(val),
+	};
+
+	if (!write)
+		goto out;
 
 	for (i = 1; i < __MPTCP_MIB_MAX; i++)
 		/* TODO - before pushing anything upstream, we have to iterate
@@ -77,7 +84,8 @@ static int mptcp_reset_snmp(struct ctl_table *table, int write,
 	for (i = 1; i < __LINUX_MIB_MAX; i++)
 		LINUX_RESET_STATS(&init_net, i);
 
-	return 0;
+out:
+	return proc_dointvec(&tlb, write, buffer, lenp, ppos);
 }
 
 
