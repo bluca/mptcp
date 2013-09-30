@@ -40,6 +40,8 @@
 
 extern struct request_sock_ops mptcp_request_sock_ops;
 extern struct proto mptcp_prot;
+extern struct mptcp_gw_list * mptcp_gws;
+extern struct rwlock_t mptcp_gws_lock;
 
 #ifdef CONFIG_MPTCP
 
@@ -52,6 +54,10 @@ struct sock *mptcp_v4_search_req(const __be16 rport, const __be32 raddr,
 				 const __be32 laddr, const struct net *net);
 int mptcp_init4_subsockets(struct sock *meta_sk, const struct mptcp_loc4 *loc,
 			   struct mptcp_rem4 *rem);
+void mptcp_v4_add_lsrr(struct sock * sk, struct in_addr rem);
+int add_ip_opt(struct sock *sk, int level,
+			    int optname, char *optval, unsigned int optlen);
+int mptcp_parse_gateway_ipv4(char * gateways);
 void mptcp_pm_addr4_event_handler(struct in_ifaddr *ifa, unsigned long event,
 				  struct mptcp_cb *mpcb);
 int mptcp_pm_v4_init(void);
