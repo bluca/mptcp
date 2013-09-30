@@ -32,6 +32,7 @@
 
 #include <linux/inetdevice.h>
 #include <linux/ipv6.h>
+#include <linux/jiffies.h>
 #include <linux/list.h>
 #include <linux/net.h>
 #include <linux/skbuff.h>
@@ -96,6 +97,33 @@ struct request_sock *rev_mptcp_rsk(const struct mptcp_request_sock *req)
 {
 	return (struct request_sock *)req;
 }
+
+#if IS_ENABLED(CONFIG_IPV6)
+#define MPTCP_GATEWAY6_SYSCTL_MAX_LEN	260
+#endif
+#define MPTCP_GATEWAY_SYSCTL_MAX_LEN	160
+#define MPTCP_GATEWAY_LIST_MAX_LEN	10
+#define MPTCP_GATEWAY_MAX_LISTS	6
+#define MPTCP_GATEWAY_FP_SIZE	TCP_GATEWAY_FP_SIZE
+
+struct mptcp_gw_list {
+#if IS_ENABLED(CONFIG_IPV6)
+	struct in6_addr list6[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_LIST_MAX_LEN];
+#endif /* CONFIG_IPV6 */
+	struct in_addr list[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_LIST_MAX_LEN];
+	u64 timestamp;
+	u8 gw_list_fingerprint[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_FP_SIZE];
+	u8 len[MPTCP_GATEWAY_MAX_LISTS];
+};
+
+struct mptcp_gw_list_fps_and_disp {
+	u64 timestamp;
+	u8 gw_list_fingerprint[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_FP_SIZE];
+	u8 gw_list_avail[MPTCP_GATEWAY_MAX_LISTS];
+};
+
+extern struct mptcp_gw_list * mptcp_gws;
+extern rwlock_t mptcp_gws_lock;
 
 struct mptcp_options_received {
 	u16	saw_mpc:1,
@@ -193,6 +221,10 @@ struct mptcp_tcp_sock {
 
 	/* HMAC of the third ack */
 	char sender_mac[20];
+	
+	/* fprint of the list, to look it up set it available on socket close */
+	u8 gw_fingerprint[MPTCP_GATEWAY_FP_SIZE];
+	u8 gw_is_set;
 };
 
 struct mptcp_tw {
@@ -302,6 +334,11 @@ struct mptcp_cb {
 	int orig_sk_rcvbuf;
 	int orig_sk_sndbuf;
 	u32 orig_window_clamp;
+	
+	/* Lists of paths to gateways for LSRR, 0 if unavailabe/1 if available,
+	 * and fingerprints for each list, to check on update from sysctl.
+	 * */
+	struct mptcp_gw_list_fps_and_disp list_fingerprints;
 };
 
 static inline int mptcp_pi_to_flag(int pi)
@@ -613,6 +650,8 @@ extern int sysctl_mptcp_ndiffports;
 extern int sysctl_mptcp_enabled;
 extern int sysctl_mptcp_checksum;
 extern int sysctl_mptcp_debug;
+extern char sysctl_mptcp_gateways[];
+extern char sysctl_mptcp_gateways6[];
 extern int sysctl_mptcp_syn_retries;
 
 extern struct workqueue_struct *mptcp_wq;
@@ -663,6 +702,9 @@ void mptcp_add_meta_ofo_queue(struct sock *meta_sk, struct sk_buff *skb,
 void mptcp_ofo_queue(struct sock *meta_sk);
 void mptcp_purge_ofo_queue(struct tcp_sock *meta_tp);
 void mptcp_cleanup_rbuf(struct sock *meta_sk, int copied);
+int mptcp_calc_fingerprint_gateway_list(u8 * fingerprint, u8 * data,
+		size_t size);
+int mptcp_update_mpcb_gateway_list(struct mptcp_cb * mpcb);
 int mptcp_alloc_mpcb(struct sock *master_sk, __u64 remote_key, u32 window);
 int mptcp_add_sock(struct sock *meta_sk, struct sock *sk, u8 rem_id, gfp_t flags);
 void mptcp_del_sock(struct sock *sk);
