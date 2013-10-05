@@ -1743,6 +1743,9 @@ struct sock *tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 		inet_csk(newsk)->icsk_ext_hdr_len = inet_opt->opt.optlen;
 	newinet->inet_id = newtp->write_seq ^ jiffies;
 
+	/* Hack: this fixes the problem of LSRR options not being correctly updated
+	 * for MPTCP subsockets after the handshake phase. */
+	ireq->opt = inet_opt;
 	if (!dst) {
 		dst = inet_csk_route_child_sock(sk, newsk, req);
 		if (!dst)
@@ -1750,6 +1753,7 @@ struct sock *tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	} else {
 		/* syncookie case : see end of cookie_v4_check() */
 	}
+	ireq->opt = NULL;
 	sk_setup_caps(newsk, dst);
 
 	tcp_mtup_init(newsk);
