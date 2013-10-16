@@ -589,7 +589,8 @@ void mptcp_v4_add_lsrr(struct sock * sk, struct in_addr rem)
 			goto error;
 
 		for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i)
-			if (tp->mpcb->list_fingerprints.gw_list_avail[i] == 1)
+			if (tp->mpcb->list_fingerprints.gw_list_avail[i] == 1
+					&& mptcp_gws->len[i] > 0)
 				break;
 	} else {
 		for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i)
@@ -600,7 +601,7 @@ void mptcp_v4_add_lsrr(struct sock * sk, struct in_addr rem)
 	/*
 	 * Execution enters here only if a free path is found.
 	 */
-	if (i < MPTCP_GATEWAY_MAX_LISTS && mptcp_gws->len[i] > 0) {
+	if (i < MPTCP_GATEWAY_MAX_LISTS) {
 		opt = kmalloc(MAX_IPOPTLEN, GFP_KERNEL);
 		opt[0] = IPOPT_NOP;
 		opt[1] = IPOPT_LSRR;
