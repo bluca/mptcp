@@ -823,7 +823,9 @@ int mptcp_parse_gateway_ipv6(char * gateways)
 					++k;
 				} else if (gateways[i] != '\0'
 						&& mptcp_gws->len[k] >= MPTCP_GATEWAY_LIST_MAX_LEN) {
-					mptcp_gws->len[k]--;
+					mptcp_debug("mptcp_parse_gateway_list too many members in list %i: max %i\n",
+						j, MPTCP_GATEWAY_LIST_MAX_LEN);
+					goto error;
 				}
 			} else {
 				goto error;
