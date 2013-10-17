@@ -770,7 +770,7 @@ error:
  *  gateways, and stores them for use with the Loose Source Routing (LSRR)
  *  socket option. Each list must have "," separated addresses, and the lists
  *  themselves must be separated by "-". Returns -1 in case one or more of the
- *  addresses is not a valid ipv4/6 address. Sysctl string must end in '-'.
+ *  addresses is not a valid ipv4/6 address.
  */
 int mptcp_parse_gateway_ipv6(char * gateways)
 {
@@ -790,13 +790,13 @@ int mptcp_parse_gateway_ipv6(char * gateways)
 	 * char is founded, but we do not want to read before the array beginning.
 	 * A TMP string is used since inet_pton needs a null terminated string but
 	 * we do not want to modify the sysctl for obvious reasons.
-	 * If a single list is longer than allowed then we overwrite the last ip
-	 * address until the end of the list or of the string is encountered, maybe
-	 * an error should be printed as well?
 	 */
-	for (i = j = k = 0; gateways[i] != '\0' && i < MPTCP_GATEWAY6_SYSCTL_MAX_LEN
-			&& k < MPTCP_GATEWAY_MAX_LISTS; ++i) {
-		if (gateways[i] == '-' || gateways[i] == ',') {
+	for (i = j = k = 0; i < MPTCP_GATEWAY6_SYSCTL_MAX_LEN && k < MPTCP_GATEWAY_MAX_LISTS; ++i) {
+		
+		if (gateways[i] == '-' || gateways[i] == ',' || gateways[i] == '\0') {
+			if (j == 0)
+				break;
+				
 			tmp_string[j] = '\0';
 			mptcp_debug("mptcp_parse_gateway_list tmp: %s i: %d \n",
 					tmp_string, i);
