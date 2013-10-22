@@ -835,7 +835,7 @@ int mptcp_update_mpcb_gateway_list(struct mptcp_cb * mpcb) {
 
 	memcpy(&mpcb->list_fingerprints.gw_list_fingerprint,
 			&mptcp_gws->gw_list_fingerprint,
-			sizeof(u8) * MPTCP_GATEWAY_MAX_LISTS * MPTCP_GATEWAY_FP_SIZE);
+			sizeof(struct mptcp_gw_list_fps_and_disp));
 	memcpy(&mpcb->list_fingerprints.gw_list_avail, tmp_avail,
 			sizeof(u8)* MPTCP_GATEWAY_MAX_LISTS);
 	mpcb->list_fingerprints.timestamp = mptcp_gws->timestamp;
@@ -1060,13 +1060,26 @@ int mptcp_alloc_mpcb(struct sock *meta_sk, __u64 remote_key, u32 window)
 	memset(&mpcb->list_fingerprints, 0,
 			sizeof(struct mptcp_gw_list_fps_and_disp));
 	if (master_tp->gw_is_set) {
-		memcpy(&mpcb->list_fingerprints.gw_list_fingerprint[0],
-				&master_tp->gw_fingerprint,
-				sizeof(u8) * MPTCP_GATEWAY_FP_SIZE);
-		mpcb->list_fingerprints.gw_list_avail[0] = 0;
-		read_lock(&mptcp_gws_lock);
-		mptcp_update_mpcb_gateway_list(mpcb);
-		read_unlock(&mptcp_gws_lock);
+		if (meta_sk->sk_family == AF_INET ||
+				    mptcp_v6_is_v4_mapped(meta_sk)) {
+			memcpy(&mpcb->list_fingerprints.gw_list_fingerprint[0],
+					&master_tp->gw_fingerprint,
+					sizeof(u8) * MPTCP_GATEWAY_FP_SIZE);
+			mpcb->list_fingerprints.gw_list_avail[0] = 0;
+			read_lock(&mptcp_gws_lock);
+			mptcp_update_mpcb_gateway_list_ipv4(mpcb);
+			read_unlock(&mptcp_gws_lock);
+		} else {
+#if IS_ENABLED(CONFIG_IPV6)
+			memcpy(&mpcb->list_fingerprints.gw_list_fingerprint6[0],
+					&master_tp->gw_fingerprint,
+					sizeof(u8) * MPTCP_GATEWAY_FP_SIZE);
+			mpcb->list_fingerprints.gw_list_avail6[0] = 0;
+			read_lock(&mptcp_gws_lock);
+			mptcp_update_mpcb_gateway_list_ipv6(mpcb);
+			read_unlock(&mptcp_gws_lock);
+#endif
+		}
 	}
 
 	return 0;
@@ -1209,15 +1222,30 @@ void mptcp_del_sock(struct sock *sk)
 	 * Sets the used path to GW as available again. We check if the match was
 	 * actually claimed in case there are duplicates.
 	 */
-	if (tp->mptcp->gw_is_set == 1)
-		for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i)
-			if (mpcb->list_fingerprints.gw_list_avail[i] == 0
-					&& !memcmp(&tp->mptcp->gw_fingerprint,
-					&mpcb->list_fingerprints.gw_list_fingerprint[i],
-					sizeof(u8) * MPTCP_GATEWAY_FP_SIZE)) {
-				mpcb->list_fingerprints.gw_list_avail[i] = 1;
-				break;
-			}
+	if (tp->mptcp->gw_is_set == 1) {
+		for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i) {
+			if (meta_sk->sk_family == AF_INET ||
+							    mptcp_v6_is_v4_mapped(meta_sk)) {
+				if (mpcb->list_fingerprints.gw_list_avail[i] == 0
+						&& !memcmp(&tp->mptcp->gw_fingerprint,
+						&mpcb->list_fingerprints.gw_list_fingerprint[i],
+						sizeof(u8) * MPTCP_GATEWAY_FP_SIZE)) {
+					mpcb->list_fingerprints.gw_list_avail[i] = 1;
+					break;
+				}
+			} else {
+#if IS_ENABLED(CONFIG_IPV6)
+				if (mpcb->list_fingerprints.gw_list_avail6[i] == 0
+						&& !memcmp(&tp->mptcp->gw_fingerprint,
+						&mpcb->list_fingerprints.gw_list_fingerprint6[i],
+						sizeof(u8) * MPTCP_GATEWAY_FP_SIZE)) {
+					mpcb->list_fingerprints.gw_list_avail6[i] = 1;
+					break;
+				}
+#endif
+  			}
+		}
+	}
 
 	if (tp_prev == tp) {
 		mpcb->connection_list = tp->mptcp->next;
