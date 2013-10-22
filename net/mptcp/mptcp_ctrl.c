@@ -1168,9 +1168,9 @@ void mptcp_del_sock(struct sock *sk)
 	 * actually claimed in case there are duplicates.
 	 */
 	if (tp->mptcp->gw_is_set == 1) {
-		for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i) {
-			if (sk->sk_family == AF_INET ||
-							    mptcp_v6_is_v4_mapped(sk)) {
+		if (sk->sk_family == AF_INET ||
+							mptcp_v6_is_v4_mapped(sk)) {
+			for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i) {
 				if (mpcb->list_fingerprints.gw_list_avail[i] == 0
 						&& !memcmp(&tp->mptcp->gw_fingerprint,
 						&mpcb->list_fingerprints.gw_list_fingerprint[i],
@@ -1178,8 +1178,10 @@ void mptcp_del_sock(struct sock *sk)
 					mpcb->list_fingerprints.gw_list_avail[i] = 1;
 					break;
 				}
-			} else {
+			}
+		} else {
 #if IS_ENABLED(CONFIG_IPV6)
+			for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i) {
 				if (mpcb->list_fingerprints.gw_list_avail6[i] == 0
 						&& !memcmp(&tp->mptcp->gw_fingerprint,
 						&mpcb->list_fingerprints.gw_list_fingerprint6[i],
@@ -1187,8 +1189,8 @@ void mptcp_del_sock(struct sock *sk)
 					mpcb->list_fingerprints.gw_list_avail6[i] = 1;
 					break;
 				}
-#endif
   			}
+#endif
 		}
 	}
 
