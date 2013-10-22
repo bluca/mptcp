@@ -774,7 +774,7 @@ error:
  */
 int mptcp_parse_gateway_ipv6(char * gateways)
 {
-	int i, j, k, l, ret;
+	int i, j, k, ret;
 	char * tmp_string = NULL;
 	struct in6_addr tmp_addr;
 
@@ -786,52 +786,68 @@ int mptcp_parse_gateway_ipv6(char * gateways)
 	memset(mptcp_gws, 0, sizeof(struct mptcp_gw_list));
 
 	/*
-	 * First condition is a hack, we want to keep working when the termination
-	 * char is founded, but we do not want to read before the array beginning.
 	 * A TMP string is used since inet_pton needs a null terminated string but
 	 * we do not want to modify the sysctl for obvious reasons.
+	 * i will iterate over the SYSCTL string, j will iterate over the temporary string where
+	 * each IP is copied into, k will iterate over the IPs in each list.
 	 */
-	for (i = j = k = l = 0; i < MPTCP_GATEWAY6_SYSCTL_MAX_LEN && k < MPTCP_GATEWAY_MAX_LISTS; ++i) {
+	for (i = j = k = 0; i < MPTCP_GATEWAY6_SYSCTL_MAX_LEN && k < MPTCP_GATEWAY_MAX_LISTS; ++i) {
 		if (gateways[i] == '-' || gateways[i] == ',' || gateways[i] == '\0') {
-			if (j == 0 && l == 0)	
+			/*
+			 * If the temp IP is empty and the current list is empty, we are done.
+			 */
+			if (j == 0 && mptcp_gws->len[k] == 0)
 				break;
-				
+
+			/*
+			 * Terminate the temp IP string, then if it is non-empty parse the IP and copy it.
+			 */
 			tmp_string[j] = '\0';
-			mptcp_debug("mptcp_parse_gateway_list tmp: %s i: %d \n",
-					tmp_string, i);
 
-			/*ret = inet_pton(AF_INET, tmp_string, &tmp_addr);*/
-			ret = in6_pton(tmp_string, strlen(tmp_string),
-					(u8 *) &tmp_addr.s6_addr, '\0', NULL);
+			if (j > 0) {
+				mptcp_debug("mptcp_parse_gateway_list tmp: %s i: %d \n",
+						tmp_string, i);
 
-			if (ret) {
-				mptcp_debug("mptcp_parse_gateway_list ret: %d s_addr: %lu\n",
-						ret, (unsigned long)tmp_addr.s6_addr);
-				memcpy(&mptcp_gws->list6[k][mptcp_gws->len[k]].s6_addr,
-						&tmp_addr.s6_addr, sizeof(tmp_addr.s6_addr));
-				mptcp_gws->len[k]++;
-				j = 0;
-				++l;
-				if (gateways[i] == '-' || gateways[i] == '\0') {
-					if (mptcp_calc_fingerprint_gateway_list(
-							(u8 *)&mptcp_gws->gw_list_fingerprint[k],
-							(u8 *)&mptcp_gws->list6[k][0],
-							sizeof(mptcp_gws->list6[k][0].s6_addr) *
-							mptcp_gws->len[k])) {
-						goto error;
-					}
-					mptcp_debug("mptcp_parse_gateway_list fingerprint calculated for list %i\n", k);
-					++k;
-					l = 0;
-				}
-				
-				if ((gateways[i] != '\0' || gateways[i+1] != '\0')
-						&& mptcp_gws->len[k] >= MPTCP_GATEWAY_LIST_MAX_LEN) {
-					mptcp_debug("mptcp_parse_gateway_list too many members in list %i: max %i\n",
-						k, MPTCP_GATEWAY_LIST_MAX_LEN);
+				/*ret = inet_pton(AF_INET, tmp_string, &tmp_addr);*/
+				ret = in6_pton(tmp_string, strlen(tmp_string),
+						(u8 *) &tmp_addr.s6_addr, '\0', NULL);
+
+				if (ret) {
+					mptcp_debug("mptcp_parse_gateway_list ret: %d s_addr: %lu\n",
+							ret, (unsigned long)tmp_addr.s6_addr);
+					memcpy(&mptcp_gws->list6[k][mptcp_gws->len[k]].s6_addr,
+							&tmp_addr.s6_addr, sizeof(tmp_addr.s6_addr));
+					mptcp_gws->len[k]++;
+					j = 0;
+					tmp_string[j] = '\0';
+				} else {
 					goto error;
 				}
-			} else {
+			}
+
+			/*
+			 * If the list is over or the SYSCTL string is over, create a fingerprint.
+			 */
+			if (gateways[i] == '-' || gateways[i] == '\0') {
+				if (mptcp_calc_fingerprint_gateway_list(
+						(u8 *)&mptcp_gws->gw_list_fingerprint[k],
+						(u8 *)&mptcp_gws->list6[k][0],
+						sizeof(mptcp_gws->list6[k][0].s6_addr) *
+						mptcp_gws->len[k])) {
+					goto error;
+				}
+				mptcp_debug("mptcp_parse_gateway_list fingerprint calculated for list %i\n", k);
+				++k;
+			}
+
+			/*
+			 * Since we can't impose a limit to what the user can input, make sure
+			 * there are not too many IPs in the SYSCTL string.
+			 */
+			if ((gateways[i] != '\0' || gateways[i+1] != '\0')
+					&& mptcp_gws->len[k] >= MPTCP_GATEWAY_LIST_MAX_LEN) {
+				mptcp_debug("mptcp_parse_gateway_list too many members in list %i: max %i\n",
+					k, MPTCP_GATEWAY_LIST_MAX_LEN);
 				goto error;
 			}
 		} else {
