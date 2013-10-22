@@ -564,6 +564,62 @@ error:
 }
 
 /*
+ * Updates the list of addresses contained in the meta-socket data structures
+ */
+int mptcp_update_mpcb_gateway_list_ipv4(struct mptcp_cb * mpcb) {
+	int i, j;
+	u8 * tmp_avail = NULL, * tmp_used = NULL;
+
+	if (mpcb->list_fingerprints.timestamp >= mptcp_gws->timestamp)
+		return 0;
+
+	if ((tmp_avail = kzalloc(sizeof(u8) * MPTCP_GATEWAY_MAX_LISTS,
+			GFP_KERNEL)) == NULL)
+		goto error;
+	if ((tmp_used = kzalloc(sizeof(u8) * MPTCP_GATEWAY_MAX_LISTS,
+			GFP_KERNEL)) == NULL)
+		goto error;
+
+	/*
+	 * tmp_used: if any two lists are exactly equivalent then their fingerprint
+	 * is also equivalent. This means that, without remembering which has
+	 * already been seet, the following code would be broken, as only the first
+	 * old value of gw_list_avail would be written on both the new variables.
+	 */
+	for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i) {
+		if (mptcp_gws->len[i] > 0) {
+			tmp_avail[i] = 1;
+			for (j = 0; j < MPTCP_GATEWAY_MAX_LISTS; ++j)
+				if (!memcmp(&mptcp_gws->gw_list_fingerprint[i],
+						&mpcb->list_fingerprints.gw_list_fingerprint[j],
+						sizeof(u8) * MPTCP_GATEWAY_FP_SIZE) && !tmp_used[j]) {
+					tmp_avail[i] = mpcb->list_fingerprints.gw_list_avail[j];
+					tmp_used[j] = 1;
+					break;
+				}
+		}
+	}
+
+	memcpy(&mpcb->list_fingerprints.gw_list_fingerprint,
+			&mptcp_gws->gw_list_fingerprint,
+			sizeof(u8) * MPTCP_GATEWAY_MAX_LISTS * MPTCP_GATEWAY_FP_SIZE);
+	memcpy(&mpcb->list_fingerprints.gw_list_avail, tmp_avail,
+			sizeof(u8) * MPTCP_GATEWAY_MAX_LISTS);
+	mpcb->list_fingerprints.timestamp = mptcp_gws->timestamp;
+	kfree(tmp_avail);
+	kfree(tmp_used);
+
+	return 0;
+
+error:
+	kfree(tmp_avail);
+	kfree(tmp_used);
+	memset(&mpcb->list_fingerprints, 0,
+			sizeof(struct mptcp_gw_list_fps_and_disp));
+	return -1;
+}
+
+/*
  * The list of addresses is parsed each time a new connection is opened, to
  *  to make sure it's up to date. In case of error, all the lists are
  *  marked as unavailable and the subflow's fingerprint is set to 0.
@@ -585,7 +641,7 @@ void mptcp_v4_add_lsrr(struct sock * sk, struct in_addr rem)
 	 * connection, all the paths are free to take.
 	 */
 	if (tp->mpcb != NULL) {
-		if (mptcp_update_mpcb_gateway_list(tp->mpcb))
+		if (mptcp_update_mpcb_gateway_list_ipv4(tp->mpcb))
 			goto error;
 
 		for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i)
