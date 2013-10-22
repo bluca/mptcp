@@ -659,11 +659,11 @@ error:
  *  gateways, and stores them for use with the Loose Source Routing (LSRR)
  *  socket option. Each list must have "," separated addresses, and the lists
  *  themselves must be separated by "-". Returns -1 in case one or more of the
- *  addresses is not a valid ipv4/6 address. Sysctl string must end in '-'.
+ *  addresses is not a valid ipv4/6 address.
  */
 int mptcp_parse_gateway_ipv4(char * gateways)
 {
-	int i, j, k, ret;
+	int i, j, k, l, ret;
 	char * tmp_string = NULL;
 	struct in_addr tmp_addr;
 
@@ -679,13 +679,12 @@ int mptcp_parse_gateway_ipv4(char * gateways)
 	 * char is founded, but we do not want to read before the array beginning.
 	 * A TMP string is used since inet_pton needs a null terminated string but
 	 * we do not want to modify the sysctl for obvious reasons.
-	 * If a single list is longer than allowed then we overwrite the last ip
-	 * address until the end of the list or of the string is encountered, maybe
-	 * an error should be printed as well?
 	 */
-	for (i = j = k = 0; gateways[i] != '\0' && i < MPTCP_GATEWAY_SYSCTL_MAX_LEN
-			&& k < MPTCP_GATEWAY_MAX_LISTS; ++i) {
-		if (gateways[i] == '-' || gateways[i] == ',') {
+	for (i = j = k = l = 0; i < MPTCP_GATEWAY_SYSCTL_MAX_LEN && k < MPTCP_GATEWAY_MAX_LISTS; ++i) {
+		if (gateways[i] == '-' || gateways[i] == ',' || gateways[i] == '\0') {
+			if (j == 0 && l == 0)	
+				break;
+			
 			tmp_string[j] = '\0';
 			mptcp_debug("mptcp_parse_gateway_list tmp: %s i: %d \n",
 					tmp_string, i);
@@ -700,7 +699,8 @@ int mptcp_parse_gateway_ipv4(char * gateways)
 						&tmp_addr.s_addr, sizeof(tmp_addr.s_addr));
 				mptcp_gws->len[k]++;
 				j = 0;
-				if (gateways[i] == '-') {
+				++l;
+				if (gateways[i] == '-' || gateways[i] == '\0') {	
 					if (mptcp_calc_fingerprint_gateway_list(
 							(u8 *)&mptcp_gws->gw_list_fingerprint[k],
 							(u8 *)&mptcp_gws->list[k][0],
@@ -708,8 +708,12 @@ int mptcp_parse_gateway_ipv4(char * gateways)
 							mptcp_gws->len[k])) {
 						goto error;
 					}
+					mptcp_debug("mptcp_parse_gateway_list fingerprint calculated for list %i\n", k);
 					++k;
-				} else if (gateways[i] != '\0'
+					l = 0;
+				}
+				
+				if ((gateways[i] != '\0' || gateways[i+1] != '\0')
 						&& mptcp_gws->len[k] >= MPTCP_GATEWAY_LIST_MAX_LEN) {
 					mptcp_debug("mptcp_parse_gateway_list too many members in list %i: max %i\n",
 						k, MPTCP_GATEWAY_LIST_MAX_LEN);
