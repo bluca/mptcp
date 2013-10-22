@@ -835,7 +835,7 @@ int mptcp_update_mpcb_gateway_list(struct mptcp_cb * mpcb) {
 
 	memcpy(&mpcb->list_fingerprints.gw_list_fingerprint,
 			&mptcp_gws->gw_list_fingerprint,
-			sizeof(struct mptcp_gw_list_fps_and_disp));
+			sizeof(u8) * MPTCP_GATEWAY_MAX_LISTS * MPTCP_GATEWAY_FP_SIZE);
 	memcpy(&mpcb->list_fingerprints.gw_list_avail, tmp_avail,
 			sizeof(u8)* MPTCP_GATEWAY_MAX_LISTS);
 	mpcb->list_fingerprints.timestamp = mptcp_gws->timestamp;
