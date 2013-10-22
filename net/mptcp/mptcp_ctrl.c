@@ -312,9 +312,27 @@ static void mptcp_mpcb_put(struct mptcp_cb *mpcb)
 
 static void mptcp_sock_destruct(struct sock *sk)
 {
+	struct sock *cb_sk, *prev = NULL;
 	struct tcp_sock *tp = tcp_sk(sk);
 
 	inet_sock_destruct(sk);
+
+	cb_sk = tp->mpcb->callback_list;
+	while (cb_sk) {
+		if (cb_sk == sk) {
+			if (prev)
+				tcp_sk(prev)->mptcp->next_cb = tcp_sk(cb_sk)->mptcp->next_cb;
+			else
+				tp->mpcb->callback_list = tcp_sk(cb_sk)->mptcp->next_cb;
+
+			tcp_sk(cb_sk)->mptcp->next_cb = NULL;
+			cb_sk->sk_prot->release_cb(cb_sk);
+			break;
+		}
+
+		prev = cb_sk;
+		cb_sk = tcp_sk(cb_sk)->mptcp->next_cb;
+	}
 
 	kmem_cache_free(mptcp_sock_cache, tp->mptcp);
 	tp->mptcp = NULL;
@@ -956,6 +974,7 @@ int mptcp_alloc_mpcb(struct sock *meta_sk, __u64 remote_key, u32 window)
 	skb_queue_head_init(&mpcb->reinject_queue);
 	skb_queue_head_init(&master_tp->out_of_order_queue);
 	tcp_prequeue_init(master_tp);
+	INIT_LIST_HEAD(&master_tp->tsq_node);
 
 	master_tp->tsq_flags = 0;
 
@@ -1225,8 +1244,6 @@ void mptcp_del_sock(struct sock *sk)
 		mpcb->master_sk = NULL;
 	else if (tp->mptcp->pre_established)
 		sk_stop_timer(sk, &tp->mptcp->mptcp_ack_timer);
-
-	sk->sk_prot->release_cb(sk);
 
 	rcu_assign_pointer(inet_sk(sk)->inet_opt, NULL);
 }
@@ -1501,7 +1518,7 @@ void mptcp_sub_close(struct sock *sk, unsigned long delay)
 void mptcp_update_sndbuf(struct mptcp_cb *mpcb)
 {
 	struct sock *meta_sk = mpcb->meta_sk, *sk;
-	int new_sndbuf = 0;
+	int new_sndbuf = 0, old_sndbuf = meta_sk->sk_sndbuf;
 	mptcp_for_each_sk(mpcb, sk) {
 		if (!mptcp_sk_can_send(sk))
 			continue;
@@ -1514,6 +1531,14 @@ void mptcp_update_sndbuf(struct mptcp_cb *mpcb)
 		}
 	}
 	meta_sk->sk_sndbuf = max(min(new_sndbuf, sysctl_tcp_wmem[2]), meta_sk->sk_sndbuf);
+
+	/* The subflow's call to sk_write_space in tcp_new_space ends up in
+	 * mptcp_write_space.
+	 * It has nothing to do with waking up the application.
+	 * So, we do it here.
+	 */
+	if (old_sndbuf != meta_sk->sk_sndbuf)
+		meta_sk->sk_write_space(meta_sk);
 }
 
 void mptcp_close(struct sock *meta_sk, long timeout)
@@ -1964,6 +1989,48 @@ void mptcp_update_tw_socks(const struct tcp_sock *tp, int state)
 	rcu_read_unlock_bh();
 }
 
+void mptcp_tsq_flags(struct sock *sk)
+{
+	struct tcp_sock *tp = tcp_sk(sk);
+	struct sock *meta_sk = mptcp_meta_sk(sk);
+
+	/* It will be handled as a regular deferred-call */
+	if (is_meta_sk(sk))
+		return;
+
+	if (!tp->mptcp->next_cb) {
+		tp->mptcp->next_cb = tp->mpcb->callback_list;
+		tp->mpcb->callback_list = sk;
+		/* We need to hold it here, as the sock_hold is not assured
+		 * by the release_sock as it is done in regular TCP.
+		 *
+		 * The subsocket may get inet_csk_destroy'd while it is inside
+		 * the callback_list.
+		 */
+		sock_hold(sk);
+	}
+
+	if (!test_and_set_bit(MPTCP_SUB_DEFERRED, &tcp_sk(meta_sk)->tsq_flags))
+		sock_hold(meta_sk);
+}
+
+void mptcp_tsq_sub_deferred(struct sock *meta_sk)
+{
+	struct sock *sk;
+	struct tcp_sock *meta_tp = tcp_sk(meta_sk);
+
+	BUG_ON(!is_meta_sk(meta_sk) && !meta_tp->was_meta_sk);
+
+	__sock_put(meta_sk);
+	while ((sk = meta_tp->mpcb->callback_list) != NULL) {
+		meta_tp->mpcb->callback_list = tcp_sk(sk)->mptcp->next_cb;
+		tcp_sk(sk)->mptcp->next_cb = NULL;
+		sk->sk_prot->release_cb(sk);
+		/* Final sock_put (cfr. mptcp_tsq_flags */
+		sock_put(sk);
+	}
+}
+
 struct workqueue_struct *mptcp_wq;
 
 /* General initialization of mptcp */
@@ -2013,7 +2080,7 @@ void __init mptcp_init(void)
 		goto register_sysctl_failed;
 #endif
 
-	pr_info("MPTCP: Stable release v0.87.2");
+	pr_info("MPTCP: Stable release v0.87.3");
 
 	mptcp_init_failed = false;
 
