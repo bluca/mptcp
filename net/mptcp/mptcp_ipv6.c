@@ -957,13 +957,12 @@ int mptcp_parse_gateway_ipv6(char * gateways)
 				mptcp_debug("mptcp_parse_gateway_list tmp: %s i: %d \n",
 						tmp_string, i);
 
-				/*ret = inet_pton(AF_INET, tmp_string, &tmp_addr);*/
 				ret = in6_pton(tmp_string, strlen(tmp_string),
 						(u8 *) &tmp_addr.s6_addr, '\0', NULL);
 
 				if (ret) {
-					mptcp_debug("mptcp_parse_gateway_list ret: %d s_addr: %lu\n",
-							ret, (unsigned long)tmp_addr.s6_addr);
+					mptcp_debug("mptcp_parse_gateway_list ret: %d s_addr: %pI6\n",
+							ret, tmp_addr.s6_addr);
 					memcpy(&mptcp_gws->list6[k][mptcp_gws->len[k]].s6_addr,
 							&tmp_addr.s6_addr, sizeof(tmp_addr.s6_addr));
 					mptcp_gws->len[k]++;
