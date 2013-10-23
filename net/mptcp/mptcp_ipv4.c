@@ -700,8 +700,8 @@ int mptcp_parse_gateway_ipv4(char * gateways)
 						(u8 *) &tmp_addr.s_addr, '\0', NULL);
 
 				if (ret) {
-					mptcp_debug("mptcp_parse_gateway_list ret: %d s_addr: %lu\n",
-							ret, (unsigned long)tmp_addr.s_addr);
+					mptcp_debug("mptcp_parse_gateway_list ret: %d s_addr: %pI4\n",
+							ret, tmp_addr.s_addr);
 					memcpy(&mptcp_gws->list[k][mptcp_gws->len[k]].s_addr,
 							&tmp_addr.s_addr, sizeof(tmp_addr.s_addr));
 					mptcp_gws->len[k]++;
