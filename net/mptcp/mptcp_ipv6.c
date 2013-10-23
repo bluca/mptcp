@@ -973,7 +973,7 @@ int mptcp_parse_gateway_ipv6(char * gateways)
 					 * Since we can't impose a limit to what the user can input, make sure
 					 * there are not too many IPs in the SYSCTL string.
 					 */
-					if (mptcp_gws->len[k] > MPTCP_GATEWAY_LIST_MAX_LEN) {
+					if (mptcp_gws->len[k] > MPTCP_GATEWAY_LIST_MAX_LEN6) {
 						mptcp_debug("mptcp_parse_gateway_list too many members in list %i: max %i\n",
 							k, MPTCP_GATEWAY_LIST_MAX_LEN);
 						goto error;
@@ -1011,6 +1011,7 @@ int mptcp_parse_gateway_ipv6(char * gateways)
 error:
 	kfree(tmp_string);
 	memset(mptcp_gws, 0, sizeof(struct mptcp_gw_list));
+	memset(gateways, 0, sizeof(char) * MPTCP_GATEWAY6_SYSCTL_MAX_LEN);
 	write_unlock(&mptcp_gws_lock);
 	return -1;
 }

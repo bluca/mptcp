@@ -806,6 +806,7 @@ int mptcp_parse_gateway_ipv4(char * gateways)
 error:
 	kfree(tmp_string);
 	memset(mptcp_gws, 0, sizeof(struct mptcp_gw_list));
+	memset(gateways, 0, sizeof(char) * MPTCP_GATEWAY_SYSCTL_MAX_LEN);
 	write_unlock(&mptcp_gws_lock);
 	return -1;
 }
