@@ -700,13 +700,22 @@ int mptcp_parse_gateway_ipv4(char * gateways)
 						(u8 *) &tmp_addr.s_addr, '\0', NULL);
 
 				if (ret) {
-					mptcp_debug("mptcp_parse_gateway_list ret: %d s_addr: %lu\n",
-							ret, (unsigned long)tmp_addr.s_addr);
+					mptcp_debug("mptcp_parse_gateway_list ret: %d s_addr: %pI4\n",
+							ret, tmp_addr.s_addr);
 					memcpy(&mptcp_gws->list[k][mptcp_gws->len[k]].s_addr,
 							&tmp_addr.s_addr, sizeof(tmp_addr.s_addr));
 					mptcp_gws->len[k]++;
 					j = 0;
 					tmp_string[j] = '\0';
+					/*
+					 * Since we can't impose a limit to what the user can input, make sure
+					 * there are not too many IPs in the SYSCTL string.
+					 */
+					if (mptcp_gws->len[k] > MPTCP_GATEWAY_LIST_MAX_LEN) {
+						mptcp_debug("mptcp_parse_gateway_list too many members in list %i: max %i\n",
+							k, MPTCP_GATEWAY_LIST_MAX_LEN);
+						goto error;
+					}
 				} else {
 					goto error;
 				}
@@ -725,17 +734,6 @@ int mptcp_parse_gateway_ipv4(char * gateways)
 				}
 				mptcp_debug("mptcp_parse_gateway_list fingerprint calculated for list %i\n", k);
 				++k;
-			}
-
-			/*
-			 * Since we can't impose a limit to what the user can input, make sure
-			 * there are not too many IPs in the SYSCTL string.
-			 */
-			if ((gateways[i] != '\0' || gateways[i+1] != '\0')
-					&& mptcp_gws->len[k] >= MPTCP_GATEWAY_LIST_MAX_LEN) {
-				mptcp_debug("mptcp_parse_gateway_list too many members in list %i: max %i\n",
-					k, MPTCP_GATEWAY_LIST_MAX_LEN);
-				goto error;
 			}
 		} else {
 			tmp_string[j] = gateways[i];
