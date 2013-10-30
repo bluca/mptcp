@@ -750,6 +750,9 @@ int mptcp_init6_subsockets(struct sock *meta_sk, const struct mptcp_loc6 *loc,
 		    ntohs(loc_in.sin6_port), &rem_in.sin6_addr,
 		    ntohs(rem_in.sin6_port));
 
+	/* Adds routing header 2 to the socket via IP_OPTION */
+	mptcp_v6_add_rh2(sk);
+
 	ret = sock.ops->connect(&sock, (struct sockaddr *)&rem_in,
 				ulid_size, O_NONBLOCK);
 	if (ret < 0 && ret != -EINPROGRESS) {
@@ -775,6 +778,152 @@ error:
 	return ret;
 }
 EXPORT_SYMBOL(mptcp_init6_subsockets);
+
+/*
+ * Updates the list of addresses contained in the meta-socket data structures
+ */
+int mptcp_update_mpcb_gateway_list_ipv6(struct mptcp_cb * mpcb) {
+	int i, j;
+	u8 * tmp_avail = NULL, * tmp_used = NULL;
+
+	if (mpcb->list_fingerprints.timestamp6 >= mptcp_gws->timestamp6)
+		return 0;
+
+	if ((tmp_avail = kzalloc(sizeof(u8) * MPTCP_GATEWAY_MAX_LISTS,
+			GFP_KERNEL)) == NULL)
+		goto error;
+	if ((tmp_used = kzalloc(sizeof(u8) * MPTCP_GATEWAY_MAX_LISTS,
+			GFP_KERNEL)) == NULL)
+		goto error;
+
+	/*
+	 * tmp_used: if any two lists are exactly equivalent then their fingerprint
+	 * is also equivalent. This means that, without remembering which has
+	 * already been seet, the following code would be broken, as only the first
+	 * old value of gw_list_avail would be written on both the new variables.
+	 */
+	for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i) {
+		if (mptcp_gws->len6[i] > 0) {
+			tmp_avail[i] = 1;
+			for (j = 0; j < MPTCP_GATEWAY_MAX_LISTS; ++j)
+				if (!memcmp(&mptcp_gws->gw_list_fingerprint6[i],
+						&mpcb->list_fingerprints.gw_list_fingerprint6[j],
+						sizeof(u8) * MPTCP_GATEWAY_FP_SIZE) && !tmp_used[j]) {
+					tmp_avail[i] = mpcb->list_fingerprints.gw_list_avail6[j];
+					tmp_used[j] = 1;
+					break;
+				}
+		}
+	}
+
+	memcpy(&mpcb->list_fingerprints.gw_list_fingerprint,
+			&mptcp_gws->gw_list_fingerprint,
+			sizeof(u8) * MPTCP_GATEWAY_MAX_LISTS * MPTCP_GATEWAY_FP_SIZE);
+	memcpy(&mpcb->list_fingerprints.gw_list_avail, tmp_avail,
+			sizeof(u8) * MPTCP_GATEWAY_MAX_LISTS);
+	mpcb->list_fingerprints.timestamp = mptcp_gws->timestamp;
+	kfree(tmp_avail);
+	kfree(tmp_used);
+
+	return 0;
+
+error:
+	kfree(tmp_avail);
+	kfree(tmp_used);
+	memset(&mpcb->list_fingerprints, 0,
+			sizeof(struct mptcp_gw_list_fps_and_disp));
+	return -1;
+}
+
+/*
+ * The list of addresses is parsed each time a new connection is opened, to
+ *  to make sure it's up to date. In case of error, all the lists are
+ *  marked as unavailable and the subflow's fingerprint is set to 0.
+ */
+void mptcp_v6_add_rh2(struct sock * sk)
+{
+	int i, j, ret;
+	char * opt = NULL;
+	struct tcp_sock * tp = tcp_sk(sk);
+
+	/*
+	 * Read lock: multiple sockets can read LSRR addresses at the same time,
+	 * but writes are done in mutual exclusion.
+	 */
+	read_lock(&mptcp_gws_lock);
+
+	/*
+	 * Added for main subflow support. If this socket is the first of a MPTCP
+	 * connection, all the paths are free to take.
+	 */
+	if (tp->mpcb != NULL) {
+		if (mptcp_update_mpcb_gateway_list_ipv6(tp->mpcb))
+			goto error;
+
+		for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i)
+			if (tp->mpcb->list_fingerprints.gw_list_avail6[i] == 1
+					&& mptcp_gws->len6[i] > 0)
+				break;
+	} else {
+		for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i)
+			if (mptcp_gws->len6[i] > 0)
+				break;
+	}
+
+	/*
+	 * Execution enters here only if a free path is found.
+	 */
+	if (i < MPTCP_GATEWAY_MAX_LISTS) {
+//		opt = kmalloc(MAX_IPOPTLEN, GFP_KERNEL);
+//		opt[0] = IPOPT_NOP;
+//		opt[1] = IPOPT_LSRR;
+//		opt[2] = sizeof(mptcp_gws->list[i][0].s_addr) * (mptcp_gws->len[i] + 1)
+//				+ 3;
+//		opt[3] = IPOPT_MINOFF;
+//		for (j = 0; j < mptcp_gws->len[i]; ++j)
+//			memcpy(opt + 4 + (j * sizeof(mptcp_gws->list[i][0].s_addr)),
+//					&mptcp_gws->list[i][j].s_addr,
+//					sizeof(mptcp_gws->list[i][0].s_addr));
+//		/* Final destination must be part of IP_OPTIONS parameter. */
+//		memcpy(opt + 4 + (j * sizeof(rem.s_addr)), &rem.s_addr,
+//				sizeof(rem.s_addr));
+//
+//		ret = ip_setsockopt(sk, IPPROTO_IP, IP_OPTIONS, opt,
+//				4 + sizeof(mptcp_gws->list[i][0].s_addr)
+//				* (mptcp_gws->len[i] + 1));
+//
+//		if (ret < 0) {
+//			mptcp_debug(KERN_ERR "%s: MPTCP subsocket setsockopt() IP_OPTIONS "
+//			"failed, error %d\n", __func__, ret);
+//			goto error;
+//		}
+
+		/*
+		 * If first socket MPTCP data structures are not allocated yet, so copy
+		 * data in the TCP data structure. Otherwise, uses MPTCP data.
+		 */
+		if (tp->mpcb != NULL) {
+			tp->mpcb->list_fingerprints.gw_list_avail6[i] = 0;
+			memcpy(&tp->mptcp->gw_fingerprint,
+					&tp->mpcb->list_fingerprints.gw_list_fingerprint6[0],
+					sizeof(u8) * MPTCP_GATEWAY_FP_SIZE);
+			tp->mptcp->gw_is_set = 1;
+		} else {
+			memcpy(&tp->gw_fingerprint, &mptcp_gws->gw_list_fingerprint6[i],
+					sizeof(u8) * MPTCP_GATEWAY_FP_SIZE);
+			tp->gw_is_set = 1;
+		}
+		kfree(opt);
+	}
+
+	read_unlock(&mptcp_gws_lock);
+	return;
+
+error:
+	read_unlock(&mptcp_gws_lock);
+	kfree(opt);
+	return;
+}
 
 /*
  *  Parses gateways string for a list of paths to different
@@ -819,13 +968,12 @@ int mptcp_parse_gateway_ipv6(char * gateways)
 				mptcp_debug("mptcp_parse_gateway_list tmp: %s i: %d \n",
 						tmp_string, i);
 
-				/*ret = inet_pton(AF_INET, tmp_string, &tmp_addr);*/
 				ret = in6_pton(tmp_string, strlen(tmp_string),
 						(u8 *) &tmp_addr.s6_addr, '\0', NULL);
 
 				if (ret) {
-					mptcp_debug("mptcp_parse_gateway_list ret: %d s_addr: %lu\n",
-							ret, (unsigned long)tmp_addr.s6_addr);
+					mptcp_debug("mptcp_parse_gateway_list ret: %d s_addr: %pI6\n",
+							ret, &tmp_addr.s6_addr);
 					memcpy(&mptcp_gws->list6[k][mptcp_gws->len[k]].s6_addr,
 							&tmp_addr.s6_addr, sizeof(tmp_addr.s6_addr));
 					mptcp_gws->len[k]++;
@@ -835,7 +983,7 @@ int mptcp_parse_gateway_ipv6(char * gateways)
 					 * Since we can't impose a limit to what the user can input, make sure
 					 * there are not too many IPs in the SYSCTL string.
 					 */
-					if (mptcp_gws->len[k] > MPTCP_GATEWAY_LIST_MAX_LEN) {
+					if (mptcp_gws->len[k] > MPTCP_GATEWAY_LIST_MAX_LEN6) {
 						mptcp_debug("mptcp_parse_gateway_list too many members in list %i: max %i\n",
 							k, MPTCP_GATEWAY_LIST_MAX_LEN);
 						goto error;
@@ -873,6 +1021,7 @@ int mptcp_parse_gateway_ipv6(char * gateways)
 error:
 	kfree(tmp_string);
 	memset(mptcp_gws, 0, sizeof(struct mptcp_gw_list));
+	memset(gateways, 0, sizeof(char) * MPTCP_GATEWAY6_SYSCTL_MAX_LEN);
 	write_unlock(&mptcp_gws_lock);
 	return -1;
 }

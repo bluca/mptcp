@@ -1043,61 +1043,6 @@ error:
 	return -1;
 }
 
-/*
- * Updates the list of addresses contained in the meta-socket data structures
- */
-int mptcp_update_mpcb_gateway_list(struct mptcp_cb * mpcb) {
-	int i, j;
-	u8 * tmp_avail = NULL, * tmp_used = NULL;
-
-	if (mpcb->list_fingerprints.timestamp >= mptcp_gws->timestamp)
-		return 0;
-
-	if ((tmp_avail = kzalloc(sizeof(u8) * MPTCP_GATEWAY_MAX_LISTS,
-			GFP_KERNEL)) == NULL)
-		goto error;
-	if ((tmp_used = kzalloc(sizeof(u8) * MPTCP_GATEWAY_MAX_LISTS,
-			GFP_KERNEL)) == NULL)
-		goto error;
-
-	/*
-	 * tmp_used: if any two lists are exactly equivalent then their fingerprint
-	 * is also equivalent. This means that, without remembering which has
-	 * already been seet, the following code would be broken, as only the first
-	 * old value of gw_list_avail would be written on both the new variables.
-	 */
-	for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i)
-		if (mptcp_gws->len[i] > 0) {
-			tmp_avail[i] = 1;
-			for (j = 0; j < MPTCP_GATEWAY_MAX_LISTS; ++j)
-				if (!memcmp(&mptcp_gws->gw_list_fingerprint[i],
-						&mpcb->list_fingerprints.gw_list_fingerprint[j],
-						sizeof(u8) * MPTCP_GATEWAY_FP_SIZE) && !tmp_used[j]) {
-					tmp_avail[i] = mpcb->list_fingerprints.gw_list_avail[j];
-					tmp_used[j] = 1;
-					break;
-				}
-		}
-
-	memcpy(&mpcb->list_fingerprints.gw_list_fingerprint,
-			&mptcp_gws->gw_list_fingerprint,
-			sizeof(u8) * MPTCP_GATEWAY_MAX_LISTS * MPTCP_GATEWAY_FP_SIZE);
-	memcpy(&mpcb->list_fingerprints.gw_list_avail, tmp_avail,
-			sizeof(u8)* MPTCP_GATEWAY_MAX_LISTS);
-	mpcb->list_fingerprints.timestamp = mptcp_gws->timestamp;
-	kfree(tmp_avail);
-	kfree(tmp_used);
-
-	return 0;
-
-error:
-	kfree(tmp_avail);
-	kfree(tmp_used);
-	memset(&mpcb->list_fingerprints, 0,
-			sizeof(struct mptcp_gw_list_fps_and_disp));
-	return -1;
-}
-
 int mptcp_alloc_mpcb(struct sock *meta_sk, __u64 remote_key, u32 window)
 {
 	struct mptcp_cb *mpcb;
@@ -1303,13 +1248,26 @@ int mptcp_alloc_mpcb(struct sock *meta_sk, __u64 remote_key, u32 window)
 	memset(&mpcb->list_fingerprints, 0,
 			sizeof(struct mptcp_gw_list_fps_and_disp));
 	if (master_tp->gw_is_set) {
-		memcpy(&mpcb->list_fingerprints.gw_list_fingerprint[0],
-				&master_tp->gw_fingerprint,
-				sizeof(u8) * MPTCP_GATEWAY_FP_SIZE);
-		mpcb->list_fingerprints.gw_list_avail[0] = 0;
-		read_lock(&mptcp_gws_lock);
-		mptcp_update_mpcb_gateway_list(mpcb);
-		read_unlock(&mptcp_gws_lock);
+		if (meta_sk->sk_family == AF_INET ||
+				    mptcp_v6_is_v4_mapped(meta_sk)) {
+			memcpy(&mpcb->list_fingerprints.gw_list_fingerprint[0],
+					&master_tp->gw_fingerprint,
+					sizeof(u8) * MPTCP_GATEWAY_FP_SIZE);
+			mpcb->list_fingerprints.gw_list_avail[0] = 0;
+			read_lock(&mptcp_gws_lock);
+			mptcp_update_mpcb_gateway_list_ipv4(mpcb);
+			read_unlock(&mptcp_gws_lock);
+		} else {
+#if IS_ENABLED(CONFIG_IPV6)
+			memcpy(&mpcb->list_fingerprints.gw_list_fingerprint6[0],
+					&master_tp->gw_fingerprint,
+					sizeof(u8) * MPTCP_GATEWAY_FP_SIZE);
+			mpcb->list_fingerprints.gw_list_avail6[0] = 0;
+			read_lock(&mptcp_gws_lock);
+			mptcp_update_mpcb_gateway_list_ipv6(mpcb);
+			read_unlock(&mptcp_gws_lock);
+#endif
+		}
 	}
 
 	return 0;
@@ -1453,15 +1411,32 @@ void mptcp_del_sock(struct sock *sk)
 	 * Sets the used path to GW as available again. We check if the match was
 	 * actually claimed in case there are duplicates.
 	 */
-	if (tp->mptcp->gw_is_set == 1)
-		for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i)
-			if (mpcb->list_fingerprints.gw_list_avail[i] == 0
-					&& !memcmp(&tp->mptcp->gw_fingerprint,
-					&mpcb->list_fingerprints.gw_list_fingerprint[i],
-					sizeof(u8) * MPTCP_GATEWAY_FP_SIZE)) {
-				mpcb->list_fingerprints.gw_list_avail[i] = 1;
-				break;
+	if (tp->mptcp->gw_is_set == 1) {
+		if (sk->sk_family == AF_INET ||
+							mptcp_v6_is_v4_mapped(sk)) {
+			for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i) {
+				if (mpcb->list_fingerprints.gw_list_avail[i] == 0
+						&& !memcmp(&tp->mptcp->gw_fingerprint,
+						&mpcb->list_fingerprints.gw_list_fingerprint[i],
+						sizeof(u8) * MPTCP_GATEWAY_FP_SIZE)) {
+					mpcb->list_fingerprints.gw_list_avail[i] = 1;
+					break;
+				}
 			}
+		} else {
+#if IS_ENABLED(CONFIG_IPV6)
+			for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i) {
+				if (mpcb->list_fingerprints.gw_list_avail6[i] == 0
+						&& !memcmp(&tp->mptcp->gw_fingerprint,
+						&mpcb->list_fingerprints.gw_list_fingerprint6[i],
+						sizeof(u8) * MPTCP_GATEWAY_FP_SIZE)) {
+					mpcb->list_fingerprints.gw_list_avail6[i] = 1;
+					break;
+				}
+  			}
+#endif
+		}
+	}
 
 	if (tp_prev == tp) {
 		mpcb->connection_list = tp->mptcp->next;
