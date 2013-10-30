@@ -962,7 +962,7 @@ int mptcp_parse_gateway_ipv6(char * gateways)
 
 				if (ret) {
 					mptcp_debug("mptcp_parse_gateway_list ret: %d s_addr: %pI6\n",
-							ret, tmp_addr.s6_addr);
+							ret, &tmp_addr.s6_addr);
 					memcpy(&mptcp_gws->list6[k][mptcp_gws->len[k]].s6_addr,
 							&tmp_addr.s6_addr, sizeof(tmp_addr.s6_addr));
 					mptcp_gws->len[k]++;
