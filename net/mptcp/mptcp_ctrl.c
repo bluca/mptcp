@@ -449,6 +449,11 @@ static struct sock *mptcp_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 struct mptcp_gw_list * mptcp_gws;
 rwlock_t mptcp_gws_lock;
 
+#if IS_ENABLED(CONFIG_IPV6)
+struct mptcp_gw_list6 * mptcp_gws6;
+rwlock_t mptcp_gws6_lock;
+#endif
+
 struct sock *mptcp_select_ack_sock(const struct sock *meta_sk, int copied)
 {
 	struct tcp_sock *meta_tp = tcp_sk(meta_sk);
@@ -1263,9 +1268,9 @@ int mptcp_alloc_mpcb(struct sock *meta_sk, __u64 remote_key, u32 window)
 					&master_tp->gw_fingerprint,
 					sizeof(u8) * MPTCP_GATEWAY_FP_SIZE);
 			mpcb->list_fingerprints.gw_list_avail6[0] = 0;
-			read_lock(&mptcp_gws_lock);
+			read_lock(&mptcp_gws6_lock);
 			mptcp_update_mpcb_gateway_list_ipv6(mpcb);
-			read_unlock(&mptcp_gws_lock);
+			read_unlock(&mptcp_gws6_lock);
 #endif
 		}
 	}
@@ -2394,12 +2399,6 @@ void __init mptcp_init(void)
 	int i;
 	struct ctl_table_header *mptcp_sysctl;
 
-	mptcp_gws = kzalloc(sizeof(struct mptcp_gw_list), GFP_KERNEL);
-	if (!mptcp_gws)
-		goto mptcp_gws_failed;
-	
-	rwlock_init(&mptcp_gws_lock);
-
 	mptcp_sock_cache = kmem_cache_create("mptcp_sock",
 					     sizeof(struct mptcp_tcp_sock),
 					     0, SLAB_HWCACHE_ALIGN,
@@ -2477,6 +2476,4 @@ mptcp_cb_cache_failed:
 	kmem_cache_destroy(mptcp_sock_cache);
 mptcp_sock_cache_failed:
 	mptcp_init_failed = true;
-mptcp_gws_failed:
-	kfree(mptcp_gws);
 }

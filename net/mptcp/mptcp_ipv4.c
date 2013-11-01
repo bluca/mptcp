@@ -823,6 +823,12 @@ int mptcp_pm_v4_init(void)
 {
 	int ret = 0;
 	struct request_sock_ops *ops = &mptcp_request_sock_ops;
+	
+	mptcp_gws = kzalloc(sizeof(struct mptcp_gw_list), GFP_KERNEL);
+	if (!mptcp_gws)
+		return -ENOMEM;
+		
+	rwlock_init(&mptcp_gws_lock);
 
 	ops->slab_name = kasprintf(GFP_KERNEL, "request_sock_%s", "MPTCP");
 	if (ops->slab_name == NULL) {

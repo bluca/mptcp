@@ -122,17 +122,20 @@ struct mptcp_request_sock {
 #endif
 
 struct mptcp_gw_list {
-#if IS_ENABLED(CONFIG_IPV6)
-	struct in6_addr list6[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_LIST_MAX_LEN6];
-	u64 timestamp6;
-	u8 gw_list_fingerprint6[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_FP_SIZE];
-	u8 len6[MPTCP_GATEWAY_MAX_LISTS];
-#endif /* CONFIG_IPV6 */
 	struct in_addr list[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_LIST_MAX_LEN];
 	u64 timestamp;
 	u8 gw_list_fingerprint[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_FP_SIZE];
 	u8 len[MPTCP_GATEWAY_MAX_LISTS];
 };
+
+#if IS_ENABLED(CONFIG_IPV6)
+struct mptcp_gw_list6 {
+	struct in6_addr list[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_LIST_MAX_LEN6];
+	u64 timestamp;
+	u8 gw_list_fingerprint[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_FP_SIZE];
+	u8 len[MPTCP_GATEWAY_MAX_LISTS];
+};
+#endif /* CONFIG_IPV6 */
 
 struct mptcp_gw_list_fps_and_disp {
 #if IS_ENABLED(CONFIG_IPV6)
@@ -147,6 +150,11 @@ struct mptcp_gw_list_fps_and_disp {
 
 extern struct mptcp_gw_list * mptcp_gws;
 extern rwlock_t mptcp_gws_lock;
+
+#if IS_ENABLED(CONFIG_IPV6)
+extern struct mptcp_gw_list6 * mptcp_gws6;
+extern rwlock_t mptcp_gws6_lock;
+#endif
 
 struct mptcp_options_received {
 	u16	saw_mpc:1,

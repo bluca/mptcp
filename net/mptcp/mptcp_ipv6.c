@@ -786,7 +786,7 @@ int mptcp_update_mpcb_gateway_list_ipv6(struct mptcp_cb * mpcb) {
 	int i, j;
 	u8 * tmp_avail = NULL, * tmp_used = NULL;
 
-	if (mpcb->list_fingerprints.timestamp6 >= mptcp_gws->timestamp6)
+	if (mpcb->list_fingerprints.timestamp >= mptcp_gws6->timestamp)
 		return 0;
 
 	if ((tmp_avail = kzalloc(sizeof(u8) * MPTCP_GATEWAY_MAX_LISTS,
@@ -803,10 +803,10 @@ int mptcp_update_mpcb_gateway_list_ipv6(struct mptcp_cb * mpcb) {
 	 * old value of gw_list_avail would be written on both the new variables.
 	 */
 	for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i) {
-		if (mptcp_gws->len6[i] > 0) {
+		if (mptcp_gws6->len[i] > 0) {
 			tmp_avail[i] = 1;
 			for (j = 0; j < MPTCP_GATEWAY_MAX_LISTS; ++j)
-				if (!memcmp(&mptcp_gws->gw_list_fingerprint6[i],
+				if (!memcmp(&mptcp_gws6->gw_list_fingerprint[i],
 						&mpcb->list_fingerprints.gw_list_fingerprint6[j],
 						sizeof(u8) * MPTCP_GATEWAY_FP_SIZE) && !tmp_used[j]) {
 					tmp_avail[i] = mpcb->list_fingerprints.gw_list_avail6[j];
@@ -816,12 +816,12 @@ int mptcp_update_mpcb_gateway_list_ipv6(struct mptcp_cb * mpcb) {
 		}
 	}
 
-	memcpy(&mpcb->list_fingerprints.gw_list_fingerprint,
-			&mptcp_gws->gw_list_fingerprint,
+	memcpy(&mpcb->list_fingerprints.gw_list_fingerprint6,
+			&mptcp_gws6->gw_list_fingerprint,
 			sizeof(u8) * MPTCP_GATEWAY_MAX_LISTS * MPTCP_GATEWAY_FP_SIZE);
-	memcpy(&mpcb->list_fingerprints.gw_list_avail, tmp_avail,
+	memcpy(&mpcb->list_fingerprints.gw_list_avail6, tmp_avail,
 			sizeof(u8) * MPTCP_GATEWAY_MAX_LISTS);
-	mpcb->list_fingerprints.timestamp = mptcp_gws->timestamp;
+	mpcb->list_fingerprints.timestamp6 = mptcp_gws6->timestamp;
 	kfree(tmp_avail);
 	kfree(tmp_used);
 
@@ -850,7 +850,7 @@ void mptcp_v6_add_rh2(struct sock * sk)
 	 * Read lock: multiple sockets can read LSRR addresses at the same time,
 	 * but writes are done in mutual exclusion.
 	 */
-	read_lock(&mptcp_gws_lock);
+	read_lock(&mptcp_gws6_lock);
 
 	/*
 	 * Added for main subflow support. If this socket is the first of a MPTCP
@@ -862,11 +862,11 @@ void mptcp_v6_add_rh2(struct sock * sk)
 
 		for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i)
 			if (tp->mpcb->list_fingerprints.gw_list_avail6[i] == 1
-					&& mptcp_gws->len6[i] > 0)
+					&& mptcp_gws6->len[i] > 0)
 				break;
 	} else {
 		for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i)
-			if (mptcp_gws->len6[i] > 0)
+			if (mptcp_gws6->len[i] > 0)
 				break;
 	}
 
@@ -909,18 +909,18 @@ void mptcp_v6_add_rh2(struct sock * sk)
 					sizeof(u8) * MPTCP_GATEWAY_FP_SIZE);
 			tp->mptcp->gw_is_set = 1;
 		} else {
-			memcpy(&tp->gw_fingerprint, &mptcp_gws->gw_list_fingerprint6[i],
+			memcpy(&tp->gw_fingerprint, &mptcp_gws6->gw_list_fingerprint[i],
 					sizeof(u8) * MPTCP_GATEWAY_FP_SIZE);
 			tp->gw_is_set = 1;
 		}
 		kfree(opt);
 	}
 
-	read_unlock(&mptcp_gws_lock);
+	read_unlock(&mptcp_gws6_lock);
 	return;
 
 error:
-	read_unlock(&mptcp_gws_lock);
+	read_unlock(&mptcp_gws6_lock);
 	kfree(opt);
 	return;
 }
@@ -938,12 +938,12 @@ int mptcp_parse_gateway_ipv6(char * gateways)
 	char * tmp_string = NULL;
 	struct in6_addr tmp_addr;
 
-	write_lock(&mptcp_gws_lock);
+	write_lock(&mptcp_gws6_lock);
 
 	if ((tmp_string = kzalloc(40, GFP_KERNEL)) == NULL)
 		goto error;
 
-	memset(mptcp_gws, 0, sizeof(struct mptcp_gw_list));
+	memset(mptcp_gws6, 0, sizeof(struct mptcp_gw_list6));
 
 	/*
 	 * A TMP string is used since inet_pton needs a null terminated string but
@@ -956,7 +956,7 @@ int mptcp_parse_gateway_ipv6(char * gateways)
 			/*
 			 * If the temp IP is empty and the current list is empty, we are done.
 			 */
-			if (j == 0 && mptcp_gws->len[k] == 0)
+			if (j == 0 && mptcp_gws6->len[k] == 0)
 				break;
 
 			/*
@@ -974,16 +974,16 @@ int mptcp_parse_gateway_ipv6(char * gateways)
 				if (ret) {
 					mptcp_debug("mptcp_parse_gateway_list ret: %d s_addr: %pI6\n",
 							ret, &tmp_addr.s6_addr);
-					memcpy(&mptcp_gws->list6[k][mptcp_gws->len[k]].s6_addr,
+					memcpy(&mptcp_gws6->list[k][mptcp_gws6->len[k]].s6_addr,
 							&tmp_addr.s6_addr, sizeof(tmp_addr.s6_addr));
-					mptcp_gws->len[k]++;
+					mptcp_gws6->len[k]++;
 					j = 0;
 					tmp_string[j] = '\0';
 					/*
 					 * Since we can't impose a limit to what the user can input, make sure
 					 * there are not too many IPs in the SYSCTL string.
 					 */
-					if (mptcp_gws->len[k] > MPTCP_GATEWAY_LIST_MAX_LEN6) {
+					if (mptcp_gws6->len[k] > MPTCP_GATEWAY_LIST_MAX_LEN6) {
 						mptcp_debug("mptcp_parse_gateway_list too many members in list %i: max %i\n",
 							k, MPTCP_GATEWAY_LIST_MAX_LEN);
 						goto error;
@@ -998,10 +998,10 @@ int mptcp_parse_gateway_ipv6(char * gateways)
 			 */
 			if (gateways[i] == '-' || gateways[i] == '\0') {
 				if (mptcp_calc_fingerprint_gateway_list(
-						(u8 *)&mptcp_gws->gw_list_fingerprint[k],
-						(u8 *)&mptcp_gws->list6[k][0],
-						sizeof(mptcp_gws->list6[k][0].s6_addr) *
-						mptcp_gws->len[k])) {
+						(u8 *)&mptcp_gws6->gw_list_fingerprint[k],
+						(u8 *)&mptcp_gws6->list[k][0],
+						sizeof(mptcp_gws6->list[k][0].s6_addr) *
+						mptcp_gws6->len[k])) {
 					goto error;
 				}
 				mptcp_debug("mptcp_parse_gateway_list fingerprint calculated for list %i\n", k);
@@ -1013,16 +1013,16 @@ int mptcp_parse_gateway_ipv6(char * gateways)
 		}
 	}
 
-	mptcp_gws->timestamp = get_jiffies_64();
+	mptcp_gws6->timestamp = get_jiffies_64();
 	kfree(tmp_string);
-	write_unlock(&mptcp_gws_lock);
+	write_unlock(&mptcp_gws6_lock);
 	return 0;
 
 error:
 	kfree(tmp_string);
-	memset(mptcp_gws, 0, sizeof(struct mptcp_gw_list));
+	memset(mptcp_gws6, 0, sizeof(struct mptcp_gw_list6));
 	memset(gateways, 0, sizeof(char) * MPTCP_GATEWAY6_SYSCTL_MAX_LEN);
-	write_unlock(&mptcp_gws_lock);
+	write_unlock(&mptcp_gws6_lock);
 	return -1;
 }
 
@@ -1030,6 +1030,12 @@ int mptcp_pm_v6_init(void)
 {
 	int ret = 0;
 	struct request_sock_ops *ops = &mptcp6_request_sock_ops;
+	
+	mptcp_gws6 = kzalloc(sizeof(struct mptcp_gw_list6), GFP_KERNEL);
+	if (!mptcp_gws6)
+		return -ENOMEM;
+		
+	rwlock_init(&mptcp_gws6_lock);
 
 	ops->slab_name = kasprintf(GFP_KERNEL, "request_sock_%s", "MPTCP6");
 	if (ops->slab_name == NULL) {
