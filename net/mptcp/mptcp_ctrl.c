@@ -65,7 +65,7 @@ int sysctl_mptcp_enabled __read_mostly = 1;
 int sysctl_mptcp_checksum __read_mostly = 1;
 int sysctl_mptcp_debug __read_mostly;
 char sysctl_mptcp_gateways[MPTCP_GATEWAY_SYSCTL_MAX_LEN] __read_mostly;
-#if IS_ENABLED(CONFIG_IPV6)
+#if IS_ENABLED(CONFIG_IPV6_MIP6)
 char sysctl_mptcp_gateways6[MPTCP_GATEWAY6_SYSCTL_MAX_LEN] __read_mostly;
 #endif
 EXPORT_SYMBOL(sysctl_mptcp_debug);
@@ -103,7 +103,7 @@ static int proc_mptcp_gateways(ctl_table *ctl, int write,
 	return ret;
 }
 
-#if IS_ENABLED(CONFIG_IPV6)
+#if IS_ENABLED(CONFIG_IPV6_MIP6)
 /* ipv6 version of the callback */
 static int proc_mptcp_gateways6(ctl_table *ctl, int write,
 				       void __user *buffer, size_t *lenp, loff_t *ppos)
@@ -193,7 +193,7 @@ static struct ctl_table mptcp_table[] = {
  		.mode = 0644,
 		.proc_handler = &proc_mptcp_gateways
  	},
-#if IS_ENABLED(CONFIG_IPV6)
+#if IS_ENABLED(CONFIG_IPV6_MIP6)
 	{
 		.procname = "mptcp_gateways6",
 		.data = &sysctl_mptcp_gateways6,
@@ -449,7 +449,7 @@ static struct sock *mptcp_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 struct mptcp_gw_list * mptcp_gws;
 rwlock_t mptcp_gws_lock;
 
-#if IS_ENABLED(CONFIG_IPV6)
+#if IS_ENABLED(CONFIG_IPV6_MIP6)
 struct mptcp_gw_list6 * mptcp_gws6;
 rwlock_t mptcp_gws6_lock;
 #endif
@@ -1263,7 +1263,7 @@ int mptcp_alloc_mpcb(struct sock *meta_sk, __u64 remote_key, u32 window)
 			mptcp_update_mpcb_gateway_list_ipv4(mpcb);
 			read_unlock(&mptcp_gws_lock);
 		} else {
-#if IS_ENABLED(CONFIG_IPV6)
+#if IS_ENABLED(CONFIG_IPV6_MIP6)
 			memcpy(&mpcb->list_fingerprints.gw_list_fingerprint6[0],
 					&master_tp->gw_fingerprint,
 					sizeof(u8) * MPTCP_GATEWAY_FP_SIZE);
@@ -1429,7 +1429,7 @@ void mptcp_del_sock(struct sock *sk)
 				}
 			}
 		} else {
-#if IS_ENABLED(CONFIG_IPV6)
+#if IS_ENABLED(CONFIG_IPV6_MIP6)
 			for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i) {
 				if (mpcb->list_fingerprints.gw_list_avail6[i] == 0
 						&& !memcmp(&tp->mptcp->gw_fingerprint,

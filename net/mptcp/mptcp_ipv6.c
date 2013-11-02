@@ -750,8 +750,10 @@ int mptcp_init6_subsockets(struct sock *meta_sk, const struct mptcp_loc6 *loc,
 		    ntohs(loc_in.sin6_port), &rem_in.sin6_addr,
 		    ntohs(rem_in.sin6_port));
 
+#if IS_ENABLED(CONFIG_IPV6_MIP6)
 	/* Adds routing header 2 to the socket via IP_OPTION */
 	mptcp_v6_add_rh2(sk);
+#endif
 
 	ret = sock.ops->connect(&sock, (struct sockaddr *)&rem_in,
 				ulid_size, O_NONBLOCK);
@@ -779,6 +781,7 @@ error:
 }
 EXPORT_SYMBOL(mptcp_init6_subsockets);
 
+#if IS_ENABLED(CONFIG_IPV6_MIP6)
 /*
  * Updates the list of addresses contained in the meta-socket data structures
  */
@@ -1025,17 +1028,20 @@ error:
 	write_unlock(&mptcp_gws6_lock);
 	return -1;
 }
+#endif
 
 int mptcp_pm_v6_init(void)
 {
 	int ret = 0;
 	struct request_sock_ops *ops = &mptcp6_request_sock_ops;
 	
+#if IS_ENABLED(CONFIG_IPV6_MIP6)
 	mptcp_gws6 = kzalloc(sizeof(struct mptcp_gw_list6), GFP_KERNEL);
 	if (!mptcp_gws6)
 		return -ENOMEM;
 		
 	rwlock_init(&mptcp_gws6_lock);
+#endif
 
 	ops->slab_name = kasprintf(GFP_KERNEL, "request_sock_%s", "MPTCP6");
 	if (ops->slab_name == NULL) {
