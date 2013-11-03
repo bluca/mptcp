@@ -845,7 +845,7 @@ error:
  */
 void mptcp_v6_add_rh2(struct sock * sk)
 {
-	int i, j, ret;
+	int i, ret;
 	char * opt = NULL;
 	struct tcp_sock * tp = tcp_sk(sk);
 
@@ -877,29 +877,23 @@ void mptcp_v6_add_rh2(struct sock * sk)
 	 * Execution enters here only if a free path is found.
 	 */
 	if (i < MPTCP_GATEWAY_MAX_LISTS) {
-//		opt = kmalloc(MAX_IPOPTLEN, GFP_KERNEL);
-//		opt[0] = IPOPT_NOP;
-//		opt[1] = IPOPT_LSRR;
-//		opt[2] = sizeof(mptcp_gws->list[i][0].s_addr) * (mptcp_gws->len[i] + 1)
-//				+ 3;
-//		opt[3] = IPOPT_MINOFF;
-//		for (j = 0; j < mptcp_gws->len[i]; ++j)
-//			memcpy(opt + 4 + (j * sizeof(mptcp_gws->list[i][0].s_addr)),
-//					&mptcp_gws->list[i][j].s_addr,
-//					sizeof(mptcp_gws->list[i][0].s_addr));
-//		/* Final destination must be part of IP_OPTIONS parameter. */
-//		memcpy(opt + 4 + (j * sizeof(rem.s_addr)), &rem.s_addr,
-//				sizeof(rem.s_addr));
-//
-//		ret = ip_setsockopt(sk, IPPROTO_IP, IP_OPTIONS, opt,
-//				4 + sizeof(mptcp_gws->list[i][0].s_addr)
-//				* (mptcp_gws->len[i] + 1));
-//
-//		if (ret < 0) {
-//			mptcp_debug(KERN_ERR "%s: MPTCP subsocket setsockopt() IP_OPTIONS "
-//			"failed, error %d\n", __func__, ret);
-//			goto error;
-//		}
+		opt = kzalloc(24, GFP_KERNEL);
+		opt[1] = 2; // Hdr Ext Len
+		opt[2] = 2; // Routing Type
+		opt[3] = 1; // Segments Left
+		
+		/*
+		 * Insert home address after 4 zero set bytes
+		 */
+		memcpy(opt + 4, &mptcp_gws6->list[0][0].s6_addr, sizeof(mptcp_gws6->list[0][0].s6_addr));
+		
+		ret = ipv6_setsockopt(sk, IPPROTO_IPV6, IPV6_RTHDR, opt, 24);
+
+		if (ret < 0) {
+			mptcp_debug(KERN_ERR "%s: MPTCP subsocket setsockopt() IPV6_RTHDR "
+			"failed, error %d\n", __func__, ret);
+			goto error;
+		}
 
 		/*
 		 * If first socket MPTCP data structures are not allocated yet, so copy
