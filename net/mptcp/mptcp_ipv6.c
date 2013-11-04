@@ -885,7 +885,7 @@ void mptcp_v6_add_rh2(struct sock * sk)
 		/*
 		 * Insert home address after 4 zero set bytes
 		 */
-		memcpy(opt + 4, &mptcp_gws6->list[0][0].s6_addr, sizeof(mptcp_gws6->list[0][0].s6_addr));
+		memcpy(opt + 8, &mptcp_gws6->list[0][0].s6_addr, sizeof(mptcp_gws6->list[0][0].s6_addr));
 		
 		ret = ipv6_setsockopt(sk, IPPROTO_IPV6, IPV6_RTHDR, opt, 24);
 
