@@ -737,8 +737,7 @@ int mptcp_fragment(struct sock *sk, struct sk_buff *skb, u32 len,
 	if (nsize < 0)
 		nsize = 0;
 
-	if (skb_cloned(skb) &&
-	    skb_is_nonlinear(skb)) {
+	if (skb_cloned(skb)) {
 		if (pskb_expand_head(skb, 0, 0, GFP_ATOMIC))
 			return -ENOMEM;
 		/* Recover dss-option */
@@ -1135,8 +1134,7 @@ retry:
 		 * the header must be expanded/copied so that there is no
 		 * corruption of TSO information.
 		 */
-		if (skb_cloned(skb) && skb_is_nonlinear(skb) &&
-		    unlikely(pskb_expand_head(skb, 0, 0, GFP_ATOMIC)))
+		if (skb_unclone(skb, GFP_ATOMIC))
 			break;
 
 		tcp_set_skb_tso_segs(meta_sk, skb, mss_now);
@@ -1180,15 +1178,6 @@ retry:
 				mpcb->noneligible |= mptcp_pi_to_flag(subtp->mptcp->path_index);
 				goto subflow;
 			}
-		}
-
-		/* TSQ : sk_wmem_alloc accounts skb truesize,
-		 * including skb overhead. But thats OK.
-		 */
-		if (atomic_read(&subsk->sk_wmem_alloc) >= sysctl_tcp_limit_output_bytes) {
-			set_bit(TSQ_THROTTLED, &subtp->tsq_flags);
-			mpcb->noneligible |= mptcp_pi_to_flag(subtp->mptcp->path_index);
-			continue;
 		}
 
 		limit = mss_now;
@@ -1945,8 +1934,7 @@ int mptcp_retransmit_skb(struct sock *meta_sk, struct sk_buff *skb)
 	 * must be expanded/copied so that there is no corruption of TSO
 	 * information.
 	 */
-	if (skb_cloned(skb) && skb_is_nonlinear(skb) &&
-	    unlikely(pskb_expand_head(skb, 0, 0, GFP_ATOMIC))) {
+	if (skb_unclone(skb, GFP_ATOMIC)) {
 		err = ENOMEM;
 		goto failed;
 	}
