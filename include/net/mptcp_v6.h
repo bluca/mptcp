@@ -56,7 +56,7 @@ struct sock *mptcp_v6_search_req(const __be16 rport, const struct in6_addr *radd
 int mptcp_init6_subsockets(struct sock *meta_sk, const struct mptcp_loc6 *loc,
 			   struct mptcp_rem6 *rem);
 int mptcp_update_mpcb_gateway_list_ipv6(struct mptcp_cb * mpcb);
-void mptcp_v6_add_rh2(struct sock * sk);
+void mptcp_v6_add_rh2(struct sock * sk, struct sockaddr_in6 *rem);
 int mptcp_parse_gateway_ipv6(char * gateways);
 int mptcp_pm_v6_init(void);
 void mptcp_pm_v6_undo(void);

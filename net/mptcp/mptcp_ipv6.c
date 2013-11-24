@@ -752,7 +752,7 @@ int mptcp_init6_subsockets(struct sock *meta_sk, const struct mptcp_loc6 *loc,
 
 #if IS_ENABLED(CONFIG_IPV6_MIP6)
 	/* Adds routing header 2 to the socket via IP_OPTION */
-	mptcp_v6_add_rh2(sk);
+	mptcp_v6_add_rh2(sk, &rem_in);
 #endif
 
 	ret = sock.ops->connect(&sock, (struct sockaddr *)&rem_in,
@@ -843,7 +843,7 @@ error:
  *  to make sure it's up to date. In case of error, all the lists are
  *  marked as unavailable and the subflow's fingerprint is set to 0.
  */
-void mptcp_v6_add_rh2(struct sock * sk)
+void mptcp_v6_add_rh2(struct sock * sk, struct sockaddr_in6 *rem)
 {
 	int i, ret;
 	char * opt = NULL;
@@ -885,7 +885,8 @@ void mptcp_v6_add_rh2(struct sock * sk)
 		/*
 		 * Insert home address after 4 zero set bytes
 		 */
-		memcpy(opt + 8, &mptcp_gws6->list[0][0].s6_addr, sizeof(mptcp_gws6->list[0][0].s6_addr));
+		memcpy(opt + 8, &rem->sin6_addr, sizeof(rem->sin6_addr));
+		memcpy(&rem->sin6_addr, &mptcp_gws6->list[0][0].s6_addr, sizeof(mptcp_gws6->list[0][0].s6_addr));
 		
 		ret = ipv6_setsockopt(sk, IPPROTO_IPV6, IPV6_RTHDR, opt, 24);
 
