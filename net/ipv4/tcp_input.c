@@ -4442,6 +4442,8 @@ static struct sk_buff *tcp_collapse_one(struct sock *sk, struct sk_buff *skb,
 		next = skb_queue_next(list, skb);
 
 	__skb_unlink(skb, list);
+	if (tcp_sk(sk)->mpc)
+		mptcp_remove_shortcuts(tcp_sk(sk)->mpcb, skb);
 	__kfree_skb(skb);
 	NET_INC_STATS_BH(sock_net(sk), LINUX_MIB_TCPRCVCOLLAPSED);
 
@@ -4463,9 +4465,6 @@ tcp_collapse(struct sock *sk, struct sk_buff_head *list,
 {
 	struct sk_buff *skb, *n;
 	bool end_of_skbs;
-
-	if (tcp_sk(sk)->mpc)
-		return;
 
 	/* First, check that queue is collapsible and find
 	 * the point where collapsing can be useful. */
@@ -4572,7 +4571,7 @@ static void tcp_collapse_ofo_queue(struct sock *sk)
 	struct sk_buff *head;
 	u32 start, end;
 
-	if (skb == NULL || tp->mpc)
+	if (skb == NULL)
 		return;
 
 	start = TCP_SKB_CB(skb)->seq;
@@ -4624,7 +4623,7 @@ static bool tcp_prune_ofo_queue(struct sock *sk)
 
 			/* No sack at the mptcp-level */
 			sk_mem_reclaim(sk);
-			res = 1;
+			res = true;
 		}
 		return res;
 	}
@@ -5897,9 +5896,6 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 			/* Wake up lingering close() */
 			sk->sk_state_change(sk);
 			break;
-		case TCP_CLOSE:
-			if (tp->mp_killed)
-				goto discard;
 		}
 
 		if (tp->linger2 < 0 ||
@@ -5943,6 +5939,9 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 			goto discard;
 		}
 		break;
+	case TCP_CLOSE:
+		if (tp->mp_killed)
+			goto discard;
 	}
 
 	/* step 6: check the URG bit */
