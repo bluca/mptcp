@@ -490,6 +490,7 @@ static void mptcp_combine_dfin(struct sk_buff *skb, struct sock *meta_sk,
 
 	/* In infinite mapping we always try to combine */
 	if (mpcb->infinite_mapping_snd && tcp_close_state(subsk)) {
+		subsk->sk_shutdown |= SEND_SHUTDOWN;
 		TCP_SKB_CB(skb)->tcp_flags |= TCPHDR_FIN;
 		return;
 	}
@@ -516,8 +517,10 @@ static void mptcp_combine_dfin(struct sk_buff *skb, struct sock *meta_sk,
 	 */
 	all_acked = (meta_tp->snd_una == (meta_tp->write_seq - 1));
 
-	if ((all_empty || all_acked) && tcp_close_state(subsk))
+	if ((all_empty || all_acked) && tcp_close_state(subsk)) {
+		subsk->sk_shutdown |= SEND_SHUTDOWN;
 		TCP_SKB_CB(skb)->tcp_flags |= TCPHDR_FIN;
+	}
 }
 
 static struct sk_buff *mptcp_skb_entail(struct sock *sk, struct sk_buff *skb,
@@ -1795,6 +1798,7 @@ void mptcp_send_active_reset(struct sock *meta_sk, gfp_t priority)
 	/* We are in infinite mode - just send a reset */
 	if (mpcb->infinite_mapping_snd || mpcb->infinite_mapping_rcv) {
 		tcp_send_active_reset(sk, priority);
+		mptcp_sub_force_close(sk);
 		return;
 	}
 

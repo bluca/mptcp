@@ -94,11 +94,11 @@ static void retry_subflow_worker(struct work_struct *work)
 next_subflow:
 	if (iter) {
 		release_sock(meta_sk);
-		mutex_unlock(&mpcb->mutex);
+		mutex_unlock(&mpcb->mpcb_mutex);
 
 		yield();
 	}
-	mutex_lock(&mpcb->mutex);
+	mutex_lock(&mpcb->mpcb_mutex);
 	lock_sock_nested(meta_sk, SINGLE_DEPTH_NESTING);
 
 	iter++;
@@ -135,7 +135,7 @@ next_subflow:
 
 exit:
 	release_sock(meta_sk);
-	mutex_unlock(&mpcb->mutex);
+	mutex_unlock(&mpcb->mpcb_mutex);
 	sock_put(meta_sk);
 }
 
@@ -172,11 +172,11 @@ static void create_subflow_worker(struct work_struct *work)
 next_subflow:
 	if (iter) {
 		release_sock(meta_sk);
-		mutex_unlock(&mpcb->mutex);
+		mutex_unlock(&mpcb->mpcb_mutex);
 
 		yield();
 	}
-	mutex_lock(&mpcb->mutex);
+	mutex_lock(&mpcb->mpcb_mutex);
 	lock_sock_nested(meta_sk, SINGLE_DEPTH_NESTING);
 
 	iter++;
@@ -235,7 +235,7 @@ next_subflow:
 exit:
 	kfree(mptcp_local);
 	release_sock(meta_sk);
-	mutex_unlock(&mpcb->mutex);
+	mutex_unlock(&mpcb->mpcb_mutex);
 	sock_put(meta_sk);
 }
 
@@ -890,6 +890,14 @@ static void full_mesh_create_subflows(struct sock *meta_sk)
 	if (mpcb->infinite_mapping_snd || mpcb->infinite_mapping_rcv ||
 	    mpcb->send_infinite_mapping ||
 	    mpcb->server_side || sock_flag(meta_sk, SOCK_DEAD))
+		return;
+
+	/* The master may not yet be fully established (address added through
+	 * mptcp_update_metasocket). Then, we should not attempt to create new
+	 * subflows.
+	 */
+	if (mpcb->master_sk &&
+	    !tcp_sk(mpcb->master_sk)->mptcp->fully_established)
 		return;
 
 	if (!work_pending(&pm_priv->subflow_work)) {
