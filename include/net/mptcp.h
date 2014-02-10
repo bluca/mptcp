@@ -116,10 +116,6 @@ struct mptcp_request_sock {
 #define MPTCP_GATEWAY_LIST_MAX_LEN	6
 #define MPTCP_GATEWAY_SYSCTL_MAX_LEN	15 * MPTCP_GATEWAY_LIST_MAX_LEN * MPTCP_GATEWAY_MAX_LISTS
 #define MPTCP_GATEWAY_FP_SIZE	TCP_GATEWAY_FP_SIZE
-#if IS_ENABLED(CONFIG_IPV6_MIP6)
-#define MPTCP_GATEWAY_LIST_MAX_LEN6	1
-#define MPTCP_GATEWAY6_SYSCTL_MAX_LEN	40 * MPTCP_GATEWAY_LIST_MAX_LEN6 * MPTCP_GATEWAY_MAX_LISTS
-#endif
 
 struct mptcp_gw_list {
 	struct in_addr list[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_LIST_MAX_LEN];
@@ -128,21 +124,7 @@ struct mptcp_gw_list {
 	u8 len[MPTCP_GATEWAY_MAX_LISTS];
 };
 
-#if IS_ENABLED(CONFIG_IPV6_MIP6)
-struct mptcp_gw_list6 {
-	struct in6_addr list[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_LIST_MAX_LEN6];
-	u64 timestamp;
-	u8 gw_list_fingerprint[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_FP_SIZE];
-	u8 len[MPTCP_GATEWAY_MAX_LISTS];
-};
-#endif /* CONFIG_IPV6_MIP6 */
-
 struct mptcp_gw_list_fps_and_disp {
-#if IS_ENABLED(CONFIG_IPV6_MIP6)
-	u64 timestamp6;
-	u8 gw_list_fingerprint6[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_FP_SIZE];
-	u8 gw_list_avail6[MPTCP_GATEWAY_MAX_LISTS];
-#endif /* CONFIG_IPV6_MIP6 */
 	u64 timestamp;
 	u8 gw_list_fingerprint[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_FP_SIZE];
 	u8 gw_list_avail[MPTCP_GATEWAY_MAX_LISTS];
@@ -150,11 +132,6 @@ struct mptcp_gw_list_fps_and_disp {
 
 extern struct mptcp_gw_list * mptcp_gws;
 extern rwlock_t mptcp_gws_lock;
-
-#if IS_ENABLED(CONFIG_IPV6_MIP6)
-extern struct mptcp_gw_list6 * mptcp_gws6;
-extern rwlock_t mptcp_gws6_lock;
-#endif
 
 struct mptcp_options_received {
 	u16	saw_mpc:1,
@@ -682,7 +659,6 @@ extern int sysctl_mptcp_enabled;
 extern int sysctl_mptcp_checksum;
 extern int sysctl_mptcp_debug;
 extern char sysctl_mptcp_gateways[];
-extern char sysctl_mptcp_gateways6[];
 extern int sysctl_mptcp_syn_retries;
 
 extern struct workqueue_struct *mptcp_wq;

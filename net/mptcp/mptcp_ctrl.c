@@ -65,9 +65,6 @@ int sysctl_mptcp_enabled __read_mostly = 1;
 int sysctl_mptcp_checksum __read_mostly = 1;
 int sysctl_mptcp_debug __read_mostly;
 char sysctl_mptcp_gateways[MPTCP_GATEWAY_SYSCTL_MAX_LEN] __read_mostly;
-#if IS_ENABLED(CONFIG_IPV6_MIP6)
-char sysctl_mptcp_gateways6[MPTCP_GATEWAY6_SYSCTL_MAX_LEN] __read_mostly;
-#endif
 EXPORT_SYMBOL(sysctl_mptcp_debug);
 int sysctl_mptcp_syn_retries __read_mostly = 3;
 
@@ -102,35 +99,6 @@ static int proc_mptcp_gateways(ctl_table *ctl, int write,
 
 	return ret;
 }
-
-#if IS_ENABLED(CONFIG_IPV6_MIP6)
-/* ipv6 version of the callback */
-static int proc_mptcp_gateways6(ctl_table *ctl, int write,
-				       void __user *buffer, size_t *lenp, loff_t *ppos)
-{
-	int ret;
-	ctl_table tbl = {
-		.maxlen = MPTCP_GATEWAY6_SYSCTL_MAX_LEN,
-	};
-
-	if (write) {
-		if ((tbl.data = kzalloc(MPTCP_GATEWAY6_SYSCTL_MAX_LEN, GFP_KERNEL))
-				== NULL)
-			return -1;
-		ret = proc_dostring(&tbl, write, buffer, lenp, ppos);
-		if (ret == 0) {
-			ret = mptcp_parse_gateway_ipv6(tbl.data);
-			memcpy(ctl->data, tbl.data, MPTCP_GATEWAY6_SYSCTL_MAX_LEN);
-		}
-		kfree(tbl.data);
-	} else {
-		ret = proc_dostring(ctl, write, buffer, lenp, ppos);
-	}
-
-
-	return ret;
-}
-#endif
 
 static int proc_mptcp_path_manager(ctl_table *ctl, int write,
 				   void __user *buffer, size_t *lenp,
@@ -193,15 +161,6 @@ static struct ctl_table mptcp_table[] = {
  		.mode = 0644,
 		.proc_handler = &proc_mptcp_gateways
  	},
-#if IS_ENABLED(CONFIG_IPV6_MIP6)
-	{
-		.procname = "mptcp_gateways6",
-		.data = &sysctl_mptcp_gateways6,
-		.maxlen = sizeof(char) * MPTCP_GATEWAY6_SYSCTL_MAX_LEN,
-		.mode = 0644,
-		.proc_handler = &proc_mptcp_gateways6
-	},
-#endif
 	{ }
 };
 
@@ -448,11 +407,6 @@ static struct sock *mptcp_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 
 struct mptcp_gw_list * mptcp_gws;
 rwlock_t mptcp_gws_lock;
-
-#if IS_ENABLED(CONFIG_IPV6_MIP6)
-struct mptcp_gw_list6 * mptcp_gws6;
-rwlock_t mptcp_gws6_lock;
-#endif
 
 struct sock *mptcp_select_ack_sock(const struct sock *meta_sk, int copied)
 {
@@ -1250,16 +1204,6 @@ int mptcp_alloc_mpcb(struct sock *meta_sk, __u64 remote_key, u32 window)
 			read_lock(&mptcp_gws_lock);
 			mptcp_update_mpcb_gateway_list_ipv4(mpcb);
 			read_unlock(&mptcp_gws_lock);
-		} else {
-#if IS_ENABLED(CONFIG_IPV6_MIP6)
-			memcpy(&mpcb->list_fingerprints.gw_list_fingerprint6[0],
-					&master_tp->gw_fingerprint,
-					sizeof(u8) * MPTCP_GATEWAY_FP_SIZE);
-			mpcb->list_fingerprints.gw_list_avail6[0] = 0;
-			read_lock(&mptcp_gws6_lock);
-			mptcp_update_mpcb_gateway_list_ipv6(mpcb);
-			read_unlock(&mptcp_gws6_lock);
-#endif
 		}
 	}
 
@@ -1408,7 +1352,7 @@ void mptcp_del_sock(struct sock *sk)
 	 */
 	if (tp->mptcp->gw_is_set == 1) {
 		if (sk->sk_family == AF_INET ||
-							mptcp_v6_is_v4_mapped(sk)) {
+				mptcp_v6_is_v4_mapped(sk)) {
 			for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i) {
 				if (mpcb->list_fingerprints.gw_list_avail[i] == 0
 						&& !memcmp(&tp->mptcp->gw_fingerprint,
@@ -1418,18 +1362,6 @@ void mptcp_del_sock(struct sock *sk)
 					break;
 				}
 			}
-		} else {
-#if IS_ENABLED(CONFIG_IPV6_MIP6)
-			for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i) {
-				if (mpcb->list_fingerprints.gw_list_avail6[i] == 0
-						&& !memcmp(&tp->mptcp->gw_fingerprint,
-						&mpcb->list_fingerprints.gw_list_fingerprint6[i],
-						sizeof(u8) * MPTCP_GATEWAY_FP_SIZE)) {
-					mpcb->list_fingerprints.gw_list_avail6[i] = 1;
-					break;
-				}
-  			}
-#endif
 		}
 	}
 
