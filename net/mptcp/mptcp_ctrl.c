@@ -210,7 +210,7 @@ static void mptcp_reqsk_remove_tk(struct request_sock *reqsk)
 {
 	rcu_read_lock();
 	spin_lock(&mptcp_tk_hashlock);
-	hlist_nulls_del_rcu(&mptcp_rsk(reqsk)->collide_tk);
+	hlist_nulls_del_init_rcu(&mptcp_rsk(reqsk)->collide_tk);
 	spin_unlock(&mptcp_tk_hashlock);
 	rcu_read_unlock();
 }
@@ -218,15 +218,12 @@ static void mptcp_reqsk_remove_tk(struct request_sock *reqsk)
 void mptcp_reqsk_destructor(struct request_sock *req)
 {
 	if (!mptcp_rsk(req)->mpcb) {
-		if (hlist_nulls_unhashed(&mptcp_rsk(req)->collide_tk))
-			return;
-
 		if (in_softirq()) {
 			mptcp_reqsk_remove_tk(req);
 		} else {
 			rcu_read_lock_bh();
 			spin_lock(&mptcp_tk_hashlock);
-			hlist_nulls_del_rcu(&mptcp_rsk(req)->collide_tk);
+			hlist_nulls_del_init_rcu(&mptcp_rsk(req)->collide_tk);
 			spin_unlock(&mptcp_tk_hashlock);
 			rcu_read_unlock_bh();
 		}
@@ -372,7 +369,7 @@ void mptcp_hash_remove_bh(struct tcp_sock *meta_tp)
 	/* remove from the token hashtable */
 	rcu_read_lock_bh();
 	spin_lock(&mptcp_tk_hashlock);
-	hlist_nulls_del_rcu(&meta_tp->tk_table);
+	hlist_nulls_del_init_rcu(&meta_tp->tk_table);
 	meta_tp->inside_tk_table = 0;
 	spin_unlock(&mptcp_tk_hashlock);
 	rcu_read_unlock_bh();
@@ -382,7 +379,7 @@ void mptcp_hash_remove(struct tcp_sock *meta_tp)
 {
 	rcu_read_lock();
 	spin_lock(&mptcp_tk_hashlock);
-	hlist_nulls_del_rcu(&meta_tp->tk_table);
+	hlist_nulls_del_init_rcu(&meta_tp->tk_table);
 	meta_tp->inside_tk_table = 0;
 	spin_unlock(&mptcp_tk_hashlock);
 	rcu_read_unlock();
@@ -421,7 +418,8 @@ struct sock *mptcp_select_ack_sock(const struct sock *meta_sk, int copied)
 
 	/* How do we select the subflow to send the window-update on?
 	 *
-	 * 1. He has to be in a state where he can send an ack.
+	 * 1. He has to be in a state where he can send an ack and is
+	 *           operational (pf = 0).
 	 * 2. He has to be one of those subflow who recently
 	 *    contributed to the received stream
 	 *    (this guarantees a working subflow)
@@ -436,7 +434,7 @@ struct sock *mptcp_select_ack_sock(const struct sock *meta_sk, int copied)
 	mptcp_for_each_sk(meta_tp->mpcb, sk) {
 		struct tcp_sock *tp = tcp_sk(sk);
 
-		if (!mptcp_sk_can_send_ack(sk))
+		if (!mptcp_sk_can_send_ack(sk) || tp->pf)
 			continue;
 
 		/* Select among those who contributed to the
@@ -2373,7 +2371,7 @@ void __init mptcp_init(void)
 	if (mptcp_register_path_manager(&mptcp_pm_default))
 		goto register_pm_failed;
 
-	pr_info("MPTCP: Stable release v0.88.7");
+	pr_info("MPTCP: Stable release v0.88.8");
 
 	mptcp_init_failed = false;
 

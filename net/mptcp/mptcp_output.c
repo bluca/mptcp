@@ -121,14 +121,8 @@ static int mptcp_dont_reinject_skb(struct tcp_sock *tp, struct sk_buff *skb)
 {
 	/* If the skb has already been enqueued in this sk, try to find
 	 * another one.
-	 * An exception is a DATA_FIN without data. These ones are not
-	 * reinjected at the subflow-level as they do not consume
-	 * subflow-sequence-number space.
 	 */
 	return skb &&
-		/* We either have a data_fin with data or not a data_fin */
-		((mptcp_is_data_fin(skb) && TCP_SKB_CB(skb)->end_seq - TCP_SKB_CB(skb)->seq  > 1) ||
-		!mptcp_is_data_fin(skb)) &&
 		/* Has the skb already been enqueued into this subsocket? */
 		mptcp_pi_to_flag(tp->mptcp->path_index) & TCP_SKB_CB(skb)->path_mask;
 }
@@ -1717,7 +1711,8 @@ struct sk_buff *mptcp_next_segment(struct sock *meta_sk, int *reinject)
 	} else {
 		skb = tcp_send_head(meta_sk);
 
-		if (!skb && meta_sk->sk_write_pending &&
+		if (!skb && meta_sk->sk_socket &&
+		    test_bit(SOCK_NOSPACE, &meta_sk->sk_socket->flags) &&
 		    sk_stream_wspace(meta_sk) < sk_stream_min_wspace(meta_sk)) {
 			struct sock *subsk = get_available_subflow(meta_sk, NULL, NULL);
 			if (!subsk)
