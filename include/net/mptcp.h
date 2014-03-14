@@ -209,8 +209,9 @@ struct mptcp_tcp_sock {
 	char sender_mac[20];
 	
 	/* fprint of the list, to look it up set it available on socket close */
-	u8 gw_fingerprint[MPTCP_GATEWAY_FP_SIZE];
-	u8 gw_is_set;
+#define MPTCP_BINDER_GATEWAY_FP_SIZE	16
+	u8 binder_gw_fingerprint[MPTCP_BINDER_GATEWAY_FP_SIZE];
+	u8 binder_gw_is_set;
 };
 
 struct mptcp_tw {
@@ -235,6 +236,9 @@ struct mptcp_pm_ops {
 			     struct net *net);
 	void (*addr_signal)(struct sock *sk, unsigned *size,
 			    struct tcp_out_options *opts, struct sk_buff *skb);
+	void (*init_subsocket_v4)(struct sock *sk, struct in_addr rem);
+	void (*init_subsocket_v6)(struct sock *sk, struct mptcp_rem6 *rem);
+	void (*del_subsocket)(struct mptcp_cb *mpcb, struct tcp_sock *tp);
 
 	char 		name[MPTCP_PM_NAME_MAX];
 	struct module 	*owner;
@@ -329,11 +333,6 @@ struct mptcp_cb {
 	int orig_sk_rcvbuf;
 	int orig_sk_sndbuf;
 	u32 orig_window_clamp;
-	
-	/* Lists of paths to gateways for LSRR, 0 if unavailabe/1 if available,
-	 * and fingerprints for each list, to check on update from sysctl.
-	 * */
-	struct mptcp_gw_list_fps_and_disp list_fingerprints;
 };
 
 #define MPTCP_SUB_CAPABLE			0

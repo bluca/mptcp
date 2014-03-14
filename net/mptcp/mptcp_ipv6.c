@@ -750,10 +750,8 @@ int mptcp_init6_subsockets(struct sock *meta_sk, const struct mptcp_loc6 *loc,
 		    ntohs(loc_in.sin6_port), &rem_in.sin6_addr,
 		    ntohs(rem_in.sin6_port));
 
-#if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
-	/* Adds routing header 0 to the socket via IP_OPTION */
-	mptcp_v6_add_rh0(sk, &rem_in);
-#endif /* CONFIG_MPTCP_BINDER_IPV6 */
+	if (mpcb->pm_ops->init_subsocket_v6)
+		mpcb->pm_ops->init_subsocket_v6(sk, &rem_in);
 
 	ret = sock.ops->connect(&sock, (struct sockaddr *)&rem_in,
 				ulid_size, O_NONBLOCK);

@@ -1107,12 +1107,6 @@ int mptcp_alloc_mpcb(struct sock *meta_sk, __u64 remote_key, u32 window)
 	mptcp_debug("%s: created mpcb with token %#x\n",
 		    __func__, mpcb->mptcp_loc_token);
 
-	/*
-	 * Allocates and initialises LSRR/Routing Header variables.
-	 */
-	memset(&mpcb->list_fingerprints, 0,
-			sizeof(struct mptcp_gw_list_fps_and_disp));
-
 	return 0;
 }
 
@@ -1251,11 +1245,8 @@ void mptcp_del_sock(struct sock *sk)
 		    __func__, mpcb->mptcp_loc_token, tp->mptcp->path_index,
 		    sk->sk_state, is_meta_sk(sk));
 
-	if (sk->sk_family == AF_INET || mptcp_v6_is_v4_mapped(sk)) {
-		set_gateway_available_v4(mpcb, tp);
-	} else {
-		set_gateway_available_v6(mpcb, tp);
-	}
+	if (mpcb->pm_ops->del_subsocket)
+		mpcb->pm_ops->del_subsocket(mpcb, tp);
 
 	if (tp_prev == tp) {
 		mpcb->connection_list = tp->mptcp->next;

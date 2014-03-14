@@ -525,8 +525,8 @@ int mptcp_init4_subsockets(struct sock *meta_sk, const struct mptcp_loc4 *loc,
 		    ntohs(loc_in.sin_port), &rem_in.sin_addr,
 		    ntohs(rem_in.sin_port));
 
-	/* Adds loose source routing to the socket via IP_OPTION */
-	mptcp_v4_add_lsrr(sk, rem->addr);
+	if (mpcb->pm_ops->init_subsocket_v4)
+		mpcb->pm_ops->init_subsocket_v4(sk, rem->addr);
 
 	ret = sock.ops->connect(&sock, (struct sockaddr *)&rem_in,
 				ulid_size, O_NONBLOCK);
