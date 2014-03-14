@@ -134,11 +134,11 @@ static void set_gateway_available(struct mptcp_cb *mpcb, struct tcp_sock *tp)
 	int i;
 	struct binder_priv *fmp = (struct binder_priv *)&mpcb->mptcp_pm[0];
 
-	if (tp->mptcp->gw_is_set == 1) {
+	if (tp->mptcp->binder_gw_is_set == 1) {
 		if (mpcb->meta_sk->sk_family == AF_INET || mptcp_v6_is_v4_mapped(mpcb->meta_sk)) {
 				for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i) {
 					if (fmp->list_fingerprints.gw_list_avail[i] == 0 &&
-							!memcmp(&tp->mptcp->gw_fingerprint,
+							!memcmp(&tp->mptcp->binder_gw_fingerprint,
 							&fmp->list_fingerprints.gw_list_fingerprint[i],
 							sizeof(u8) * MPTCP_BINDER_GATEWAY_FP_SIZE)) {
 						fmp->list_fingerprints.gw_list_avail[i] = 1;
@@ -147,10 +147,10 @@ static void set_gateway_available(struct mptcp_cb *mpcb, struct tcp_sock *tp)
 				}
 		} else {
 #if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
-			if (tp->mptcp->gw_is_set == 1) {
+			if (tp->mptcp->binder_gw_is_set == 1) {
 				for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i) {
 					if (fmp->list_fingerprints.gw_list_avail6[i] == 0 &&
-							!memcmp(&tp->mptcp->gw_fingerprint,
+							!memcmp(&tp->mptcp->binder_gw_fingerprint,
 							&fmp->list_fingerprints.gw_list_fingerprint6[i],
 							sizeof(u8) * MPTCP_BINDER_GATEWAY_FP_SIZE)) {
 						fmp->list_fingerprints.gw_list_avail6[i] = 1;
@@ -290,14 +290,14 @@ static void mptcp_v4_add_lsrr(struct sock * sk, struct in_addr rem)
 		 */
 		if (tp->mpcb != NULL) {
 			fmp->list_fingerprints.gw_list_avail[i] = 0;
-			memcpy(&tp->mptcp->gw_fingerprint,
+			memcpy(&tp->mptcp->binder_gw_fingerprint,
 					&fmp->list_fingerprints.gw_list_fingerprint[0],
 					sizeof(u8) * MPTCP_BINDER_GATEWAY_FP_SIZE);
-			tp->mptcp->gw_is_set = 1;
+			tp->mptcp->binder_gw_is_set = 1;
 		} else {
-			memcpy(&tp->mptcp->gw_fingerprint, &mptcp_gws->gw_list_fingerprint[i],
+			memcpy(&tp->mptcp->binder_gw_fingerprint, &mptcp_gws->gw_list_fingerprint[i],
 					sizeof(u8) * MPTCP_BINDER_GATEWAY_FP_SIZE);
-			tp->mptcp->gw_is_set = 1;
+			tp->mptcp->binder_gw_is_set = 1;
 		}
 		kfree(opt);
 	}
@@ -536,14 +536,14 @@ static void mptcp_v6_add_rh0(struct sock * sk, struct sockaddr_in6 *rem)
 		 */
 		if (tp->mpcb != NULL) {
 			fmp->list_fingerprints.gw_list_avail6[i] = 0;
-			memcpy(&tp->mptcp->gw_fingerprint,
+			memcpy(&tp->mptcp->binder_gw_fingerprint,
 					&fmp->list_fingerprints.gw_list_fingerprint6[0],
 					sizeof(u8) * MPTCP_BINDER_GATEWAY_FP_SIZE);
-			tp->mptcp->gw_is_set = 1;
+			tp->mptcp->binder_gw_is_set = 1;
 		} else {
-			memcpy(&tp->mptcp->gw_fingerprint, &mptcp_gws6->gw_list_fingerprint[i],
+			memcpy(&tp->mptcp->binder_gw_fingerprint, &mptcp_gws6->gw_list_fingerprint[i],
 					sizeof(u8) * MPTCP_BINDER_GATEWAY_FP_SIZE);
-			tp->mptcp->gw_is_set = 1;
+			tp->mptcp->binder_gw_is_set = 1;
 		}
 		kfree(opt);
 	}
