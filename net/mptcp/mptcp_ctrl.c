@@ -1192,18 +1192,6 @@ int mptcp_alloc_mpcb(struct sock *meta_sk, __u64 remote_key, u32 window)
 	 */
 	memset(&mpcb->list_fingerprints, 0,
 			sizeof(struct mptcp_gw_list_fps_and_disp));
-	if (master_tp->gw_is_set) {
-		if (meta_sk->sk_family == AF_INET ||
-				    mptcp_v6_is_v4_mapped(meta_sk)) {
-			memcpy(&mpcb->list_fingerprints.gw_list_fingerprint[0],
-					&master_tp->gw_fingerprint,
-					sizeof(u8) * MPTCP_GATEWAY_FP_SIZE);
-			mpcb->list_fingerprints.gw_list_avail[0] = 0;
-			read_lock(&mptcp_gws_lock);
-			mptcp_update_mpcb_gateway_list_ipv4(mpcb);
-			read_unlock(&mptcp_gws_lock);
-		}
-	}
 
 	return 0;
 }
