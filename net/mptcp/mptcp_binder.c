@@ -86,65 +86,6 @@ static rwlock_t mptcp_gws6_lock;
 static char sysctl_mptcp_gateways6[MPTCP_GATEWAY6_SYSCTL_MAX_LEN] __read_mostly;
 #endif /* CONFIG_MPTCP_BINDER_IPV6 */
 
-/*
- * Callback functions, executed when syctl mptcp.mptcp_gateways is updated.
- * Inspired from proc_tcp_congestion_control().
- */
-static int proc_mptcp_gateways(ctl_table *ctl, int write,
-				       void __user *buffer, size_t *lenp, loff_t *ppos)
-{
-	int ret;
-	ctl_table tbl = {
-		.maxlen = MPTCP_GATEWAY_SYSCTL_MAX_LEN,
-	};
-
-	if (write) {
-		if ((tbl.data = kzalloc(MPTCP_GATEWAY_SYSCTL_MAX_LEN, GFP_KERNEL))
-				== NULL)
-			return -1;
-		ret = proc_dostring(&tbl, write, buffer, lenp, ppos);
-		if (ret == 0) {
-			ret = mptcp_parse_gateway_ipv4(tbl.data);
-			memcpy(ctl->data, tbl.data, MPTCP_GATEWAY_SYSCTL_MAX_LEN);
-		}
-		kfree(tbl.data);
-	} else {
-		ret = proc_dostring(ctl, write, buffer, lenp, ppos);
-	}
-
-
-	return ret;
-}
-
-#if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
-/* ipv6 version of the callback */
-static int proc_mptcp_gateways6(ctl_table *ctl, int write,
-				       void __user *buffer, size_t *lenp, loff_t *ppos)
-{
-	int ret;
-	ctl_table tbl = {
-		.maxlen = MPTCP_GATEWAY6_SYSCTL_MAX_LEN,
-	};
-
-	if (write) {
-		if ((tbl.data = kzalloc(MPTCP_GATEWAY6_SYSCTL_MAX_LEN, GFP_KERNEL))
-				== NULL)
-			return -1;
-		ret = proc_dostring(&tbl, write, buffer, lenp, ppos);
-		if (ret == 0) {
-			ret = mptcp_parse_gateway_ipv6(tbl.data);
-			memcpy(ctl->data, tbl.data, MPTCP_GATEWAY6_SYSCTL_MAX_LEN);
-		}
-		kfree(tbl.data);
-	} else {
-		ret = proc_dostring(ctl, write, buffer, lenp, ppos);
-	}
-
-
-	return ret;
-}
-#endif /* CONFIG_MPTCP_BINDER_IPV6 */
-
 /* Computes fingerprint of a list of IP addresses (4/16 bytes integers),
  * used to compare newly parsed sysctl variable with old one.
  * PAGE_SIZE is hard limit (1024 ipv4 or 256 ipv6 addresses per list) */
@@ -821,6 +762,65 @@ static int binder_get_local_id(sa_family_t family, union inet_addr *addr,
 {
 	return 0;
 }
+
+/*
+ * Callback functions, executed when syctl mptcp.mptcp_gateways is updated.
+ * Inspired from proc_tcp_congestion_control().
+ */
+static int proc_mptcp_gateways(ctl_table *ctl, int write,
+				       void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	int ret;
+	ctl_table tbl = {
+		.maxlen = MPTCP_GATEWAY_SYSCTL_MAX_LEN,
+	};
+
+	if (write) {
+		if ((tbl.data = kzalloc(MPTCP_GATEWAY_SYSCTL_MAX_LEN, GFP_KERNEL))
+				== NULL)
+			return -1;
+		ret = proc_dostring(&tbl, write, buffer, lenp, ppos);
+		if (ret == 0) {
+			ret = mptcp_parse_gateway_ipv4(tbl.data);
+			memcpy(ctl->data, tbl.data, MPTCP_GATEWAY_SYSCTL_MAX_LEN);
+		}
+		kfree(tbl.data);
+	} else {
+		ret = proc_dostring(ctl, write, buffer, lenp, ppos);
+	}
+
+
+	return ret;
+}
+
+#if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
+/* ipv6 version of the callback */
+static int proc_mptcp_gateways6(ctl_table *ctl, int write,
+				       void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	int ret;
+	ctl_table tbl = {
+		.maxlen = MPTCP_GATEWAY6_SYSCTL_MAX_LEN,
+	};
+
+	if (write) {
+		if ((tbl.data = kzalloc(MPTCP_GATEWAY6_SYSCTL_MAX_LEN, GFP_KERNEL))
+				== NULL)
+			return -1;
+		ret = proc_dostring(&tbl, write, buffer, lenp, ppos);
+		if (ret == 0) {
+			ret = mptcp_parse_gateway_ipv6(tbl.data);
+			memcpy(ctl->data, tbl.data, MPTCP_GATEWAY6_SYSCTL_MAX_LEN);
+		}
+		kfree(tbl.data);
+	} else {
+		ret = proc_dostring(ctl, write, buffer, lenp, ppos);
+	}
+
+
+	return ret;
+}
+#endif /* CONFIG_MPTCP_BINDER_IPV6 */
 
 static struct mptcp_pm_ops binder __read_mostly = {
 	.new_session = binder_new_session,

@@ -237,7 +237,7 @@ struct mptcp_pm_ops {
 	void (*addr_signal)(struct sock *sk, unsigned *size,
 			    struct tcp_out_options *opts, struct sk_buff *skb);
 	void (*init_subsocket_v4)(struct sock *sk, struct in_addr rem);
-	void (*init_subsocket_v6)(struct sock *sk, struct mptcp_rem6 *rem);
+	void (*init_subsocket_v6)(struct sock *sk, struct sockaddr_in6 *rem);
 	void (*del_subsocket)(struct mptcp_cb *mpcb, struct tcp_sock *tp);
 
 	char 		name[MPTCP_PM_NAME_MAX];
