@@ -64,73 +64,10 @@ static struct kmem_cache *mptcp_tw_cache __read_mostly;
 int sysctl_mptcp_enabled __read_mostly = 1;
 int sysctl_mptcp_checksum __read_mostly = 1;
 int sysctl_mptcp_debug __read_mostly;
-char sysctl_mptcp_gateways[MPTCP_GATEWAY_SYSCTL_MAX_LEN] __read_mostly;
-#if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
-char sysctl_mptcp_gateways6[MPTCP_GATEWAY6_SYSCTL_MAX_LEN] __read_mostly;
-#endif /* CONFIG_MPTCP_BINDER_IPV6 */
 EXPORT_SYMBOL(sysctl_mptcp_debug);
 int sysctl_mptcp_syn_retries __read_mostly = 3;
 
 bool mptcp_init_failed __read_mostly;
-
-/*
- * Callback functions, executed when syctl mptcp.mptcp_gateways is updated.
- * Inspired from proc_tcp_congestion_control().
- */
-static int proc_mptcp_gateways(ctl_table *ctl, int write,
-				       void __user *buffer, size_t *lenp, loff_t *ppos)
-{
-	int ret;
-	ctl_table tbl = {
-		.maxlen = MPTCP_GATEWAY_SYSCTL_MAX_LEN,
-	};
-
-	if (write) {
-		if ((tbl.data = kzalloc(MPTCP_GATEWAY_SYSCTL_MAX_LEN, GFP_KERNEL))
-				== NULL)
-			return -1;
-		ret = proc_dostring(&tbl, write, buffer, lenp, ppos);
-		if (ret == 0) {
-			ret = mptcp_parse_gateway_ipv4(tbl.data);
-			memcpy(ctl->data, tbl.data, MPTCP_GATEWAY_SYSCTL_MAX_LEN);
-		}
-		kfree(tbl.data);
-	} else {
-		ret = proc_dostring(ctl, write, buffer, lenp, ppos);
-	}
-
-
-	return ret;
-}
-
-#if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
-/* ipv6 version of the callback */
-static int proc_mptcp_gateways6(ctl_table *ctl, int write,
-				       void __user *buffer, size_t *lenp, loff_t *ppos)
-{
-	int ret;
-	ctl_table tbl = {
-		.maxlen = MPTCP_GATEWAY6_SYSCTL_MAX_LEN,
-	};
-
-	if (write) {
-		if ((tbl.data = kzalloc(MPTCP_GATEWAY6_SYSCTL_MAX_LEN, GFP_KERNEL))
-				== NULL)
-			return -1;
-		ret = proc_dostring(&tbl, write, buffer, lenp, ppos);
-		if (ret == 0) {
-			ret = mptcp_parse_gateway_ipv6(tbl.data);
-			memcpy(ctl->data, tbl.data, MPTCP_GATEWAY6_SYSCTL_MAX_LEN);
-		}
-		kfree(tbl.data);
-	} else {
-		ret = proc_dostring(ctl, write, buffer, lenp, ppos);
-	}
-
-
-	return ret;
-}
-#endif /* CONFIG_MPTCP_BINDER_IPV6 */
 
 static int proc_mptcp_path_manager(ctl_table *ctl, int write,
 				   void __user *buffer, size_t *lenp,
@@ -186,22 +123,6 @@ static struct ctl_table mptcp_table[] = {
 		.maxlen		= MPTCP_PM_NAME_MAX,
 		.proc_handler	= proc_mptcp_path_manager,
 	},
-	{
-		.procname = "mptcp_gateways",
-		.data = &sysctl_mptcp_gateways,
-		.maxlen = sizeof(char) * MPTCP_GATEWAY_SYSCTL_MAX_LEN,
- 		.mode = 0644,
-		.proc_handler = &proc_mptcp_gateways
- 	},
-#if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
-	{
-		.procname = "mptcp_gateways6",
-		.data = &sysctl_mptcp_gateways6,
-		.maxlen = sizeof(char) * MPTCP_GATEWAY6_SYSCTL_MAX_LEN,
-		.mode = 0644,
-		.proc_handler = &proc_mptcp_gateways6
-	},
-#endif /* CONFIG_MPTCP_BINDER_IPV6 */
 	{ }
 };
 
@@ -442,14 +363,6 @@ static struct sock *mptcp_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	/* sk->sk_family == AF_INET && req->rsk_ops->family == AF_INET */
 	return tcp_v4_syn_recv_sock(sk, skb, req, dst);
 }
-
-struct mptcp_gw_list * mptcp_gws;
-rwlock_t mptcp_gws_lock;
-
-#if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
-struct mptcp_gw_list6 * mptcp_gws6;
-rwlock_t mptcp_gws6_lock;
-#endif /* CONFIG_MPTCP_BINDER_IPV6 */
 
 struct sock *mptcp_select_ack_sock(const struct sock *meta_sk, int copied)
 {
@@ -991,45 +904,6 @@ static int mptcp_inherit_sk(const struct sock *sk, struct sock *newsk,
 	return 0;
 }
 
-/* Computes fingerprint of a list of IP addresses (4/16 bytes integers),
- * used to compare newly parsed sysctl variable with old one.
- * PAGE_SIZE is hard limit (1024 ipv4 or 256 ipv6 addresses per list) */
-int mptcp_calc_fingerprint_gateway_list(u8 * fingerprint, u8 * data,
-		size_t size)
-{
-	struct scatterlist * sg = NULL;
-	struct crypto_hash * tfm = NULL;
-	struct hash_desc desc;
-
-	if (size > PAGE_SIZE)
-		goto error;
-
-	if ((sg = kmalloc(sizeof(struct scatterlist), GFP_KERNEL)) == NULL)
-		goto error;
-
-	if ((tfm = crypto_alloc_hash("md5", 0, CRYPTO_ALG_ASYNC)) == NULL)
-		goto error;
-
-	sg_init_one(sg, (u8 *)data, size);
-
-	desc.tfm = tfm;
-	if (crypto_hash_init(&desc) != 0)
-		goto error;
-
-	if (crypto_hash_digest(&desc, sg, size, fingerprint) != 0)
-		goto error;
-
-	crypto_free_hash(tfm);
-	kfree(sg);
-
-	return 0;
-
-error:
-	crypto_free_hash(tfm);
-	kfree(sg);
-	return -1;
-}
-
 int mptcp_alloc_mpcb(struct sock *meta_sk, __u64 remote_key, u32 window)
 {
 	struct mptcp_cb *mpcb;
@@ -1366,7 +1240,6 @@ void mptcp_del_sock(struct sock *sk)
 {
 	struct tcp_sock *tp = tcp_sk(sk), *tp_prev;
 	struct mptcp_cb *mpcb;
-	int i;
 
 	if (!tp->mptcp || !tp->mptcp->attached)
 		return;
@@ -1378,35 +1251,10 @@ void mptcp_del_sock(struct sock *sk)
 		    __func__, mpcb->mptcp_loc_token, tp->mptcp->path_index,
 		    sk->sk_state, is_meta_sk(sk));
 
-	/*
-	 * Sets the used path to GW as available again. We check if the match was
-	 * actually claimed in case there are duplicates.
-	 */
-	if (tp->mptcp->gw_is_set == 1) {
-		if (sk->sk_family == AF_INET ||
-							mptcp_v6_is_v4_mapped(sk)) {
-			for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i) {
-				if (mpcb->list_fingerprints.gw_list_avail[i] == 0
-						&& !memcmp(&tp->mptcp->gw_fingerprint,
-						&mpcb->list_fingerprints.gw_list_fingerprint[i],
-						sizeof(u8) * MPTCP_GATEWAY_FP_SIZE)) {
-					mpcb->list_fingerprints.gw_list_avail[i] = 1;
-					break;
-				}
-			}
-		} else {
-#if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
-			for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i) {
-				if (mpcb->list_fingerprints.gw_list_avail6[i] == 0
-						&& !memcmp(&tp->mptcp->gw_fingerprint,
-						&mpcb->list_fingerprints.gw_list_fingerprint6[i],
-						sizeof(u8) * MPTCP_GATEWAY_FP_SIZE)) {
-					mpcb->list_fingerprints.gw_list_avail6[i] = 1;
-					break;
-				}
-  			}
-#endif /* CONFIG_MPTCP_BINDER_IPV6 */
-		}
+	if (sk->sk_family == AF_INET || mptcp_v6_is_v4_mapped(sk)) {
+		set_gateway_available_v4(mpcb, tp);
+	} else {
+		set_gateway_available_v6(mpcb, tp);
 	}
 
 	if (tp_prev == tp) {

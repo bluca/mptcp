@@ -50,11 +50,6 @@ struct sock *mptcp_v4_search_req(const __be16 rport, const __be32 raddr,
 				 const __be32 laddr, const struct net *net);
 int mptcp_init4_subsockets(struct sock *meta_sk, const struct mptcp_loc4 *loc,
 			   struct mptcp_rem4 *rem);
-int mptcp_update_mpcb_gateway_list_ipv4(struct mptcp_cb * mpcb);
-void mptcp_v4_add_lsrr(struct sock * sk, struct in_addr rem);
-int add_ip_opt(struct sock *sk, int level,
-			   int optname, char *optval, unsigned int optlen);
-int mptcp_parse_gateway_ipv4(char * gateways);
 int mptcp_pm_v4_init(void);
 void mptcp_pm_v4_undo(void);
 u32 mptcp_v4_get_nonce(__be32 saddr, __be32 daddr, __be16 sport, __be16 dport,
