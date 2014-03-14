@@ -701,9 +701,9 @@ void mptcp_v4_add_lsrr(struct sock * sk, struct in_addr rem)
 					sizeof(u8) * MPTCP_GATEWAY_FP_SIZE);
 			tp->mptcp->gw_is_set = 1;
 		} else {
-			memcpy(&tp->gw_fingerprint, &mptcp_gws->gw_list_fingerprint[i],
+			memcpy(&tp->mptcp->gw_fingerprint, &mptcp_gws->gw_list_fingerprint[i],
 					sizeof(u8) * MPTCP_GATEWAY_FP_SIZE);
-			tp->gw_is_set = 1;
+			tp->mptcp->gw_is_set = 1;
 		}
 		kfree(opt);
 	}
