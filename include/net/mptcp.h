@@ -116,10 +116,10 @@ struct mptcp_request_sock {
 #define MPTCP_GATEWAY_LIST_MAX_LEN	6
 #define MPTCP_GATEWAY_SYSCTL_MAX_LEN	15 * MPTCP_GATEWAY_LIST_MAX_LEN * MPTCP_GATEWAY_MAX_LISTS
 #define MPTCP_GATEWAY_FP_SIZE	16
-#if IS_ENABLED(CONFIG_IPV6_MIP6)
+#if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
 #define MPTCP_GATEWAY_LIST_MAX_LEN6	1
 #define MPTCP_GATEWAY6_SYSCTL_MAX_LEN	40 * MPTCP_GATEWAY_LIST_MAX_LEN6 * MPTCP_GATEWAY_MAX_LISTS
-#endif
+#endif  /* CONFIG_MPTCP_BINDER_IPV6 */
 
 struct mptcp_gw_list {
 	struct in_addr list[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_LIST_MAX_LEN];
@@ -128,21 +128,21 @@ struct mptcp_gw_list {
 	u8 len[MPTCP_GATEWAY_MAX_LISTS];
 };
 
-#if IS_ENABLED(CONFIG_IPV6_MIP6)
+#if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
 struct mptcp_gw_list6 {
 	struct in6_addr list[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_LIST_MAX_LEN6];
 	u64 timestamp;
 	u8 gw_list_fingerprint[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_FP_SIZE];
 	u8 len[MPTCP_GATEWAY_MAX_LISTS];
 };
-#endif /* CONFIG_IPV6_MIP6 */
+#endif /* CONFIG_MPTCP_BINDER_IPV6 */
 
 struct mptcp_gw_list_fps_and_disp {
-#if IS_ENABLED(CONFIG_IPV6_MIP6)
+#if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
 	u64 timestamp6;
 	u8 gw_list_fingerprint6[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_FP_SIZE];
 	u8 gw_list_avail6[MPTCP_GATEWAY_MAX_LISTS];
-#endif /* CONFIG_IPV6_MIP6 */
+#endif /* CONFIG_MPTCP_BINDER_IPV6 */
 	u64 timestamp;
 	u8 gw_list_fingerprint[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_FP_SIZE];
 	u8 gw_list_avail[MPTCP_GATEWAY_MAX_LISTS];
@@ -151,10 +151,10 @@ struct mptcp_gw_list_fps_and_disp {
 extern struct mptcp_gw_list * mptcp_gws;
 extern rwlock_t mptcp_gws_lock;
 
-#if IS_ENABLED(CONFIG_IPV6_MIP6)
+#if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
 extern struct mptcp_gw_list6 * mptcp_gws6;
 extern rwlock_t mptcp_gws6_lock;
-#endif
+#endif /* CONFIG_MPTCP_BINDER_IPV6 */
 
 struct mptcp_options_received {
 	u16	saw_mpc:1,
