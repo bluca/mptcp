@@ -540,7 +540,7 @@ static void mptcp_v6_add_rh0(struct sock * sk, struct sockaddr_in6 *rem)
 	int i, ret;
 	char * opt = NULL;
 	struct tcp_sock * tp = tcp_sk(sk);
-	struct binder_priv *fmp = (struct binder_priv *)&mpcb->mptcp_pm[0];
+	struct binder_priv *fmp = (struct binder_priv *)&tp->mpcb->mptcp_pm[0];
 
 	/*
 	 * Read lock: multiple sockets can read LSRR addresses at the same time,
