@@ -41,7 +41,7 @@ config MPTCP_BINDER
 
 config MPTCP_BINDER_IPV6
 	bool "Binder IPv6 support via Routing Header 0"
-	depends on (MPTCP=y && IPV6=y && MPTCP_BINDER=y)
+	depends on (MPTCP=y && IPV6=y &&  (MPTCP_BINDER=y || MPTCP_BINDER=m))
 	---help---
 	  WARNING: experimental. Support for MPTCP Binder IPv6 via Routing Header
 	  type 0. Enable only if your network devices support IPv6 Routing Header
