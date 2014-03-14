@@ -15,6 +15,13 @@ menuconfig MPTCP_PM_ADVANCED
 	  Support for selection of different path-managers. You should choose 'Y' here,
 	  because otherwise you will not actively create new MPTCP-subflows.
 
+config MPTCP_BINDER_IPV6
+	bool "Binder IPv6 support via Routing Header 0"
+	depends on (MPTCP=y && IPV6=y)
+	---help---
+	  WARNING: experimental. Support for MPTCP Binder IPv6 via Routing Header
+	  type 0. Enable only if your network supports IPv6 Routing Header Type 0.
+
 if MPTCP_PM_ADVANCED
 
 config MPTCP_FULLMESH
