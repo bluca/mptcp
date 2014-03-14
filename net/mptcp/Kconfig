@@ -32,7 +32,7 @@ config MPTCP_NDIFFPORTS
 	  of subflows via the mptcp_ndiffports-sysctl.
 
 config MPTCP_BINDER
-	tristate "Binder IPv6 support via Routing Header 0"
+	tristate "MPTCP Binder"
 	depends on (MPTCP=y)
 	---help---
 	  This path-management module works like ndiffports, and adds the sysctl
