@@ -142,8 +142,6 @@ struct tcp_options_received {
 	u16	mss_clamp;	/* Maximal mss, negotiated at connection setup */
 };
 
-#define TCP_GATEWAY_FP_SIZE		16
-
 struct mptcp_cb;
 struct mptcp_tcp_sock;
 
@@ -401,10 +399,6 @@ struct tcp_sock {
 	u32		mptcp_loc_token;
 	u64		mptcp_loc_key;
 #endif /* CONFIG_MPTCP */
-
-	/* fprint of the list, to look it up to set it available on socket close */
-	u8 gw_fingerprint[TCP_GATEWAY_FP_SIZE];
-	u8 gw_is_set;
 };
 
 enum tsq_flags {
