@@ -908,9 +908,9 @@ void mptcp_v6_add_rh0(struct sock * sk, struct sockaddr_in6 *rem)
 					sizeof(u8) * MPTCP_GATEWAY_FP_SIZE);
 			tp->mptcp->gw_is_set = 1;
 		} else {
-			memcpy(&tp->gw_fingerprint, &mptcp_gws6->gw_list_fingerprint[i],
+			memcpy(&tp->mptcp->gw_fingerprint, &mptcp_gws6->gw_list_fingerprint[i],
 					sizeof(u8) * MPTCP_GATEWAY_FP_SIZE);
-			tp->gw_is_set = 1;
+			tp->mptcp->gw_is_set = 1;
 		}
 		kfree(opt);
 	}
