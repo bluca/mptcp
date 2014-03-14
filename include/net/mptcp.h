@@ -286,7 +286,7 @@ struct mptcp_cb {
 
 	u8 dfin_path_index;
 
-#define MPTCP_PM_SIZE 320
+#define MPTCP_PM_SIZE 640
 	u8 mptcp_pm[MPTCP_PM_SIZE] __aligned(8);
 	struct mptcp_pm_ops *pm_ops;
 
