@@ -686,6 +686,7 @@ int mptcp_init6_subsockets(struct sock *meta_sk, const struct mptcp_loc6 *loc,
 	struct sock *sk;
 	struct sockaddr_in6 loc_in, rem_in;
 	struct socket sock;
+	struct mptcp_cb *mpcb = tcp_sk(meta_sk)->mpcb;
 	int ulid_size = 0, ret;
 
 	/* Don't try again - even if it fails.

@@ -464,6 +464,7 @@ int mptcp_init4_subsockets(struct sock *meta_sk, const struct mptcp_loc4 *loc,
 	struct sock *sk;
 	struct sockaddr_in loc_in, rem_in;
 	struct socket sock;
+	struct mptcp_cb *mpcb = tcp_sk(meta_sk)->mpcb;
 	int ulid_size = 0, ret;
 
 	/* Don't try again - even if it fails */
