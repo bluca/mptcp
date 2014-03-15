@@ -60,7 +60,7 @@ choice
 		bool "ndiff-ports" if MPTCP_NDIFFPORTS=y
 
 	config DEFAULT_BINDER
-		bool "ndiff-ports" if MPTCP_BINDER=y
+		bool "binder" if MPTCP_BINDER=y
 
 	config DEFAULT_DUMMY
 		bool "Default"
