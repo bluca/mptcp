@@ -73,7 +73,7 @@ static rwlock_t mptcp_gws_lock;
 static struct mptcp_gw_list * mptcp_gws;
 static rwlock_t mptcp_gws_lock;
 
-static int sysctl_mptcp_binder __read_mostly = 2;
+static int sysctl_mptcp_ndiffports __read_mostly = 2;
 static char sysctl_mptcp_gateways[MPTCP_GATEWAY_SYSCTL_MAX_LEN] __read_mostly;
 
 #if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
@@ -694,8 +694,8 @@ next_subflow:
 	    !tcp_sk(mpcb->master_sk)->mptcp->fully_established)
 		goto exit;
 
-	if (sysctl_mptcp_binder > iter &&
-	    sysctl_mptcp_binder > mpcb->cnt_subflows) {
+	if (sysctl_mptcp_ndiffports > iter &&
+	    sysctl_mptcp_ndiffports > mpcb->cnt_subflows) {
 		if (meta_sk->sk_family == AF_INET ||
 		    mptcp_v6_is_v4_mapped(meta_sk)) {
 			struct mptcp_loc4 loc;
@@ -835,8 +835,8 @@ static struct mptcp_pm_ops binder __read_mostly = {
 
 static struct ctl_table binder_table[] = {
 	{
-		.procname = "mptcp_binder",
-		.data = &sysctl_mptcp_binder,
+		.procname = "mptcp_ndiffports",
+		.data = &sysctl_mptcp_ndiffports,
 		.maxlen = sizeof(int),
 		.mode = 0644,
 		.proc_handler = &proc_dointvec
@@ -860,7 +860,7 @@ static struct ctl_table binder_table[] = {
 	{ }
 };
 
-struct ctl_table_header *mptcp_sysctl;
+struct ctl_table_header *mptcp_sysctl_binder;
 
 /* General initialization of MPTCP_PM */
 static int __init binder_register(void)
@@ -881,8 +881,8 @@ static int __init binder_register(void)
 
 	BUILD_BUG_ON(sizeof(struct binder_priv) > MPTCP_PM_SIZE);
 
-	mptcp_sysctl = register_net_sysctl(&init_net, "net/mptcp", binder_table);
-	if (!mptcp_sysctl)
+	mptcp_sysctl_binder = register_net_sysctl(&init_net, "net/mptcp", binder_table);
+	if (!mptcp_sysctl_binder)
 		goto exit;
 
 	if (mptcp_register_path_manager(&binder))
@@ -891,7 +891,7 @@ static int __init binder_register(void)
 	return 0;
 
 pm_failed:
-	unregister_net_sysctl_table(mptcp_sysctl);
+	unregister_net_sysctl_table(mptcp_sysctl_binder);
 exit:
 	return -1;
 }
@@ -899,7 +899,7 @@ exit:
 static void binder_unregister(void)
 {
 	mptcp_unregister_path_manager(&binder);
-	unregister_net_sysctl_table(mptcp_sysctl);
+	unregister_net_sysctl_table(mptcp_sysctl_binder);
 	kfree(mptcp_gws);
 #if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
 	kfree(mptcp_gws6);
