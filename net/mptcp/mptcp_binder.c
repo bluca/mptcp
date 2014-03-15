@@ -136,26 +136,24 @@ static void set_gateway_available(struct mptcp_cb *mpcb, struct tcp_sock *tp)
 
 	if (tp->mptcp->binder_gw_is_set == 1) {
 		if (mpcb->meta_sk->sk_family == AF_INET || mptcp_v6_is_v4_mapped(mpcb->meta_sk)) {
-				for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i) {
-					if (fmp->list_fingerprints.gw_list_avail[i] == 0 &&
-							!memcmp(&tp->mptcp->binder_gw_fingerprint,
-							&fmp->list_fingerprints.gw_list_fingerprint[i],
-							sizeof(u8) * MPTCP_BINDER_GATEWAY_FP_SIZE)) {
-						fmp->list_fingerprints.gw_list_avail[i] = 1;
-						break;
-					}
+			for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i) {
+				if (fmp->list_fingerprints.gw_list_avail[i] == 0 &&
+						!memcmp(&tp->mptcp->binder_gw_fingerprint,
+						&fmp->list_fingerprints.gw_list_fingerprint[i],
+						sizeof(u8) * MPTCP_BINDER_GATEWAY_FP_SIZE)) {
+					fmp->list_fingerprints.gw_list_avail[i] = 1;
+					break;
 				}
+			}
 		} else {
 #if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
-			if (tp->mptcp->binder_gw_is_set == 1) {
-				for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i) {
-					if (fmp->list_fingerprints.gw_list_avail6[i] == 0 &&
-							!memcmp(&tp->mptcp->binder_gw_fingerprint,
-							&fmp->list_fingerprints.gw_list_fingerprint6[i],
-							sizeof(u8) * MPTCP_BINDER_GATEWAY_FP_SIZE)) {
-						fmp->list_fingerprints.gw_list_avail6[i] = 1;
-						break;
-					}
+			for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i) {
+				if (fmp->list_fingerprints.gw_list_avail6[i] == 0 &&
+						!memcmp(&tp->mptcp->binder_gw_fingerprint,
+						&fmp->list_fingerprints.gw_list_fingerprint6[i],
+						sizeof(u8) * MPTCP_BINDER_GATEWAY_FP_SIZE)) {
+					fmp->list_fingerprints.gw_list_avail6[i] = 1;
+					break;
 				}
 			}
 #endif /* CONFIG_MPTCP_BINDER_IPV6 */
