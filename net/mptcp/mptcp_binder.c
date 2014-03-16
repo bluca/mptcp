@@ -73,8 +73,8 @@ static rwlock_t mptcp_gws_lock;
 static struct mptcp_gw_list * mptcp_gws;
 static rwlock_t mptcp_gws_lock;
 
-static int sysctl_mptcp_ndiffports __read_mostly = 2;
-static char sysctl_mptcp_gateways[MPTCP_GATEWAY_SYSCTL_MAX_LEN] __read_mostly;
+static int sysctl_mptcp_binder_ndiffports __read_mostly = 2;
+static char sysctl_mptcp_binder_gateways[MPTCP_GATEWAY_SYSCTL_MAX_LEN] __read_mostly;
 
 #if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
 static struct mptcp_gw_list6 * mptcp_gws6;
@@ -83,7 +83,7 @@ static rwlock_t mptcp_gws6_lock;
 static struct mptcp_gw_list6 * mptcp_gws6;
 static rwlock_t mptcp_gws6_lock;
 
-static char sysctl_mptcp_gateways6[MPTCP_GATEWAY6_SYSCTL_MAX_LEN] __read_mostly;
+static char sysctl_mptcp_binder_gateways6[MPTCP_GATEWAY6_SYSCTL_MAX_LEN] __read_mostly;
 #endif /* CONFIG_MPTCP_BINDER_IPV6 */
 
 /* Computes fingerprint of a list of IP addresses (4/16 bytes integers),
@@ -692,8 +692,8 @@ next_subflow:
 	    !tcp_sk(mpcb->master_sk)->mptcp->fully_established)
 		goto exit;
 
-	if (sysctl_mptcp_ndiffports > iter &&
-	    sysctl_mptcp_ndiffports > mpcb->cnt_subflows) {
+	if (sysctl_mptcp_binder_ndiffports > iter &&
+	    sysctl_mptcp_binder_ndiffports > mpcb->cnt_subflows) {
 		if (meta_sk->sk_family == AF_INET ||
 		    mptcp_v6_is_v4_mapped(meta_sk)) {
 			struct mptcp_loc4 loc;
@@ -835,23 +835,23 @@ static struct mptcp_pm_ops binder __read_mostly = {
 
 static struct ctl_table binder_table[] = {
 	{
-		.procname = "mptcp_ndiffports",
-		.data = &sysctl_mptcp_ndiffports,
+		.procname = "mptcp_binder_ndiffports",
+		.data = &sysctl_mptcp_binder_ndiffports,
 		.maxlen = sizeof(int),
 		.mode = 0644,
 		.proc_handler = &proc_dointvec
 	},
 	{
-		.procname = "mptcp_gateways",
-		.data = &sysctl_mptcp_gateways,
+		.procname = "mptcp_binder_gateways",
+		.data = &sysctl_mptcp_binder_gateways,
 		.maxlen = sizeof(char) * MPTCP_GATEWAY_SYSCTL_MAX_LEN,
  		.mode = 0644,
 		.proc_handler = &proc_mptcp_gateways
  	},
 #if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
 	{
-		.procname = "mptcp_gateways6",
-		.data = &sysctl_mptcp_gateways6,
+		.procname = "mptcp_binder_gateways6",
+		.data = &sysctl_mptcp_binder_gateways6,
 		.maxlen = sizeof(char) * MPTCP_GATEWAY6_SYSCTL_MAX_LEN,
 		.mode = 0644,
 		.proc_handler = &proc_mptcp_gateways6
