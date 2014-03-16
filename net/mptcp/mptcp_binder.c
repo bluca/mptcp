@@ -825,7 +825,9 @@ static struct mptcp_pm_ops binder __read_mostly = {
 	.fully_established = binder_create_subflows,
 	.get_local_id = binder_get_local_id,
 	.init_subsocket_v4 = mptcp_v4_add_lsrr,
+#if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
 	.init_subsocket_v6 = mptcp_v6_add_rh0,
+#endif /* CONFIG_MPTCP_BINDER_IPV6 */
 	.del_subsocket = set_gateway_available,
 	.name = "binder",
 	.owner = THIS_MODULE,
