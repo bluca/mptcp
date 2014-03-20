@@ -30,6 +30,16 @@ config MPTCP_NDIFFPORTS
 	  This path-management module will create multiple subflows between the same
 	  pair of IP-addresses, modifying the source-port. You can set the number
 	  of subflows via the mptcp_ndiffports-sysctl.
+	  
+config MPTCP_NDIFFPORTS_LSRR
+	tristate "MPTCP ndiff-ports-lsrr"
+	depends on MPTCP=y
+	---help---
+	  This path-management module will create multiple subflows between the same
+	  pair of IP-addresses, modifying the source-port. Subflows may be separately
+	  source routed. You can set the number of subflows via the
+	  mptcp_ndiffports_lsrr-sysctl. Source route paths may be set via the 
+	  mptcp_ndiffports_lsrr_gateways-sysctl.
 
 choice
 	prompt "Default MPTCP Path-Manager"
@@ -42,6 +52,9 @@ choice
 
 	config DEFAULT_NDIFFPORTS
 		bool "ndiff-ports" if MPTCP_NDIFFPORTS=y
+		
+	config DEFAULT_NDIFFPORTS_LSRR
+		bool "ndiff-ports-lsrr" if MPTCP_NDIFFPORTS_LSRR=y
 
 	config DEFAULT_DUMMY
 		bool "Default"
@@ -55,4 +68,5 @@ config DEFAULT_MPTCP_PM
 	default "default" if DEFAULT_DUMMY
 	default "fullmesh" if DEFAULT_FULLMESH 
 	default "ndiffports" if DEFAULT_NDIFFPORTS
+	default "ndiffports_lsrr" if DEFAULT_NDIFFPORTS_LSRR
 	default "default"
