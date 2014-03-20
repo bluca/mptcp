@@ -207,6 +207,10 @@ struct mptcp_tcp_sock {
 
 	/* HMAC of the third ack */
 	char sender_mac[20];
+	
+	/* Heavily (!) inspired by mptcp_pm[] in mptcp_cb */
+#define MPTCP_PM_SOCK_SIZE 17
+	u8 mptcp_pm_sock[MPTCP_PM_SOCK_SIZE] __aligned(8);
 };
 
 struct mptcp_tw {
@@ -226,6 +230,8 @@ struct mptcp_pm_ops {
 	void (*new_session)(struct sock *meta_sk, u8 id);
 	void (*release_sock)(struct sock *meta_sk);
 	void (*fully_established)(struct sock *meta_sk);
+	void (*subsock_bind)(struct sock *sk, struct mptcp_rem4 *rem);
+	void (*sock_del)(struct sock *sk);
 	void (*new_remote_address)(struct sock *meta_sk);
 	int  (*get_local_id)(sa_family_t family, union inet_addr *addr,
 			     struct net *net);
@@ -278,7 +284,7 @@ struct mptcp_cb {
 
 	u8 dfin_path_index;
 
-#define MPTCP_PM_SIZE 320
+#define MPTCP_PM_SIZE 420
 	u8 mptcp_pm[MPTCP_PM_SIZE] __aligned(8);
 	struct mptcp_pm_ops *pm_ops;
 
