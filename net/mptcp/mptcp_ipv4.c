@@ -511,9 +511,6 @@ int mptcp_init4_subsockets(struct sock *meta_sk, const struct mptcp_loc4 *loc,
 		rem_in.sin_port = inet_sk(meta_sk)->inet_dport;
 	loc_in.sin_addr = loc->addr;
 	rem_in.sin_addr = rem->addr;
-	
-	if (tcp_sk(sk)->mpcb->pm_ops->subsock_bind)
-		tcp_sk(sk)->mpcb->pm_ops->subsock_bind(sk, rem);
 
 	ret = sock.ops->bind(&sock, (struct sockaddr *)&loc_in, ulid_size);
 	if (ret < 0) {
@@ -527,6 +524,9 @@ int mptcp_init4_subsockets(struct sock *meta_sk, const struct mptcp_loc4 *loc,
 		    tp->mptcp->path_index, &loc_in.sin_addr,
 		    ntohs(loc_in.sin_port), &rem_in.sin_addr,
 		    ntohs(rem_in.sin_port));
+		    
+	if (tcp_sk(sk)->mpcb->pm_ops->subsock4_bind)
+		tcp_sk(sk)->mpcb->pm_ops->subsock4_bind(sk, rem);
 
 	ret = sock.ops->connect(&sock, (struct sockaddr *)&rem_in,
 				ulid_size, O_NONBLOCK);

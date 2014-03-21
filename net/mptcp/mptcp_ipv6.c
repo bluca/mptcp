@@ -750,6 +750,9 @@ int mptcp_init6_subsockets(struct sock *meta_sk, const struct mptcp_loc6 *loc,
 		    ntohs(loc_in.sin6_port), &rem_in.sin6_addr,
 		    ntohs(rem_in.sin6_port));
 
+	if (tcp_sk(sk)->mpcb->pm_ops->subsock6_bind)
+		tcp_sk(sk)->mpcb->pm_ops->subsock6_bind(sk, rem);
+
 	ret = sock.ops->connect(&sock, (struct sockaddr *)&rem_in,
 				ulid_size, O_NONBLOCK);
 	if (ret < 0 && ret != -EINPROGRESS) {

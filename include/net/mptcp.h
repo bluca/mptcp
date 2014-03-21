@@ -230,7 +230,8 @@ struct mptcp_pm_ops {
 	void (*new_session)(struct sock *meta_sk, u8 id);
 	void (*release_sock)(struct sock *meta_sk);
 	void (*fully_established)(struct sock *meta_sk);
-	void (*subsock_bind)(struct sock *sk, struct mptcp_rem4 *rem);
+	void (*subsock4_bind)(struct sock *sk, struct mptcp_rem4 *rem);
+	void (*subsock6_bind)(struct sock *sk, struct mptcp_rem6 *rem);
 	void (*sock_del)(struct sock *sk);
 	void (*new_remote_address)(struct sock *meta_sk);
 	int  (*get_local_id)(sa_family_t family, union inet_addr *addr,
