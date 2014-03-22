@@ -890,6 +890,7 @@ static int __init binder_register(void)
 #endif /* CONFIG_MPTCP_BINDER_IPV6 */
 
 	BUILD_BUG_ON(sizeof(struct binder_priv) > MPTCP_PM_SIZE);
+	BUILD_BUG_ON(sizeof(struct binder_used_gw) > MPTCP_PM_SOCK_SIZE);
 
 	mptcp_sysctl_binder = register_net_sysctl(&init_net, "net/mptcp", binder_table);
 	if (!mptcp_sysctl_binder)
