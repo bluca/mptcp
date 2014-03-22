@@ -207,11 +207,10 @@ struct mptcp_tcp_sock {
 
 	/* HMAC of the third ack */
 	char sender_mac[20];
-	
-	/* fprint of the list, to look it up set it available on socket close */
-#define MPTCP_BINDER_GATEWAY_FP_SIZE	16
-	u8 binder_gw_fingerprint[MPTCP_BINDER_GATEWAY_FP_SIZE];
-	u8 binder_gw_is_set;
+
+	 /* Heavily (!) inspired by mptcp_pm[] in mptcp_cb */
+#define MPTCP_PM_SOCK_SIZE 24
+	u8 mptcp_pm_sock[MPTCP_PM_SOCK_SIZE] __aligned(8);
 };
 
 struct mptcp_tw {

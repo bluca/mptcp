@@ -20,6 +20,8 @@
 #include <net/transp_v6.h>
 #endif
 
+/* fprint of the list, to look it up set it available on socket close */
+#define MPTCP_GATEWAY_FP_SIZE	16
 #define MPTCP_GATEWAY_MAX_LISTS	10
 #define MPTCP_GATEWAY_LIST_MAX_LEN	6
 #define MPTCP_GATEWAY_SYSCTL_MAX_LEN	15 * MPTCP_GATEWAY_LIST_MAX_LEN * MPTCP_GATEWAY_MAX_LISTS
@@ -31,7 +33,7 @@
 struct mptcp_gw_list {
 	struct in_addr list[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_LIST_MAX_LEN];
 	u64 timestamp;
-	u8 gw_list_fingerprint[MPTCP_GATEWAY_MAX_LISTS][MPTCP_BINDER_GATEWAY_FP_SIZE];
+	u8 gw_list_fingerprint[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_FP_SIZE];
 	u8 len[MPTCP_GATEWAY_MAX_LISTS];
 };
 
@@ -39,7 +41,7 @@ struct mptcp_gw_list {
 struct mptcp_gw_list6 {
 	struct in6_addr list[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_LIST_MAX_LEN6];
 	u64 timestamp;
-	u8 gw_list_fingerprint[MPTCP_GATEWAY_MAX_LISTS][MPTCP_BINDER_GATEWAY_FP_SIZE];
+	u8 gw_list_fingerprint[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_FP_SIZE];
 	u8 len[MPTCP_GATEWAY_MAX_LISTS];
 };
 #endif /* CONFIG_MPTCP_BINDER_IPV6 */
@@ -47,12 +49,17 @@ struct mptcp_gw_list6 {
 struct mptcp_gw_list_fps_and_disp {
 #if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
 	u64 timestamp6;
-	u8 gw_list_fingerprint6[MPTCP_GATEWAY_MAX_LISTS][MPTCP_BINDER_GATEWAY_FP_SIZE];
+	u8 gw_list_fingerprint6[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_FP_SIZE];
 	u8 gw_list_avail6[MPTCP_GATEWAY_MAX_LISTS];
 #endif /* CONFIG_MPTCP_BINDER_IPV6 */
 	u64 timestamp;
-	u8 gw_list_fingerprint[MPTCP_GATEWAY_MAX_LISTS][MPTCP_BINDER_GATEWAY_FP_SIZE];
+	u8 gw_list_fingerprint[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_FP_SIZE];
 	u8 gw_list_avail[MPTCP_GATEWAY_MAX_LISTS];
+};
+
+struct binder_used_gw {
+	u8 gw_fingerprint[MPTCP_GATEWAY_FP_SIZE];
+	u8 gw_is_set;
 };
 
 struct binder_priv {
@@ -133,14 +140,15 @@ static void set_gateway_available(struct mptcp_cb *mpcb, struct tcp_sock *tp)
 {
 	int i;
 	struct binder_priv *fmp = (struct binder_priv *)&mpcb->mptcp_pm[0];
+	struct binder_used_gw *used_gw = (struct binder_used_gw *)&tp->mptcp->mptcp_pm_sock[0];
 
-	if (tp->mptcp->binder_gw_is_set == 1) {
+	if (used_gw->gw_is_set == 1) {
 		if (mpcb->meta_sk->sk_family == AF_INET || mptcp_v6_is_v4_mapped(mpcb->meta_sk)) {
 			for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i) {
 				if (fmp->list_fingerprints.gw_list_avail[i] == 0 &&
-						!memcmp(&tp->mptcp->binder_gw_fingerprint,
+						!memcmp(&used_gw->gw_fingerprint,
 						&fmp->list_fingerprints.gw_list_fingerprint[i],
-						sizeof(u8) * MPTCP_BINDER_GATEWAY_FP_SIZE)) {
+						sizeof(u8) * MPTCP_GATEWAY_FP_SIZE)) {
 					fmp->list_fingerprints.gw_list_avail[i] = 1;
 					break;
 				}
@@ -149,9 +157,9 @@ static void set_gateway_available(struct mptcp_cb *mpcb, struct tcp_sock *tp)
 #if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
 			for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i) {
 				if (fmp->list_fingerprints.gw_list_avail6[i] == 0 &&
-						!memcmp(&tp->mptcp->binder_gw_fingerprint,
+						!memcmp(&used_gw->gw_fingerprint,
 						&fmp->list_fingerprints.gw_list_fingerprint6[i],
-						sizeof(u8) * MPTCP_BINDER_GATEWAY_FP_SIZE)) {
+						sizeof(u8) * MPTCP_GATEWAY_FP_SIZE)) {
 					fmp->list_fingerprints.gw_list_avail6[i] = 1;
 					break;
 				}
@@ -191,7 +199,7 @@ static int mptcp_update_mpcb_gateway_list_ipv4(struct mptcp_cb * mpcb) {
 			for (j = 0; j < MPTCP_GATEWAY_MAX_LISTS; ++j)
 				if (!memcmp(&mptcp_gws->gw_list_fingerprint[i],
 						&fmp->list_fingerprints.gw_list_fingerprint[j],
-						sizeof(u8) * MPTCP_BINDER_GATEWAY_FP_SIZE) && !tmp_used[j]) {
+						sizeof(u8) * MPTCP_GATEWAY_FP_SIZE) && !tmp_used[j]) {
 					tmp_avail[i] = fmp->list_fingerprints.gw_list_avail[j];
 					tmp_used[j] = 1;
 					break;
@@ -201,7 +209,7 @@ static int mptcp_update_mpcb_gateway_list_ipv4(struct mptcp_cb * mpcb) {
 
 	memcpy(&fmp->list_fingerprints.gw_list_fingerprint,
 			&mptcp_gws->gw_list_fingerprint,
-			sizeof(u8) * MPTCP_GATEWAY_MAX_LISTS * MPTCP_BINDER_GATEWAY_FP_SIZE);
+			sizeof(u8) * MPTCP_GATEWAY_MAX_LISTS * MPTCP_GATEWAY_FP_SIZE);
 	memcpy(&fmp->list_fingerprints.gw_list_avail, tmp_avail,
 			sizeof(u8) * MPTCP_GATEWAY_MAX_LISTS);
 	fmp->list_fingerprints.timestamp = mptcp_gws->timestamp;
@@ -229,6 +237,7 @@ static void mptcp_v4_add_lsrr(struct sock * sk, struct in_addr rem)
 	char * opt = NULL;
 	struct tcp_sock * tp = tcp_sk(sk);
 	struct binder_priv *fmp = (struct binder_priv *)&tp->mpcb->mptcp_pm[0];
+	struct binder_used_gw *used_gw = (struct binder_used_gw *)&tp->mptcp->mptcp_pm_sock[0];
 
 	/*
 	 * Read lock: multiple sockets can read LSRR addresses at the same time,
@@ -288,14 +297,14 @@ static void mptcp_v4_add_lsrr(struct sock * sk, struct in_addr rem)
 		 */
 		if (tp->mpcb != NULL) {
 			fmp->list_fingerprints.gw_list_avail[i] = 0;
-			memcpy(&tp->mptcp->binder_gw_fingerprint,
+			memcpy(&used_gw->gw_fingerprint,
 					&fmp->list_fingerprints.gw_list_fingerprint[0],
-					sizeof(u8) * MPTCP_BINDER_GATEWAY_FP_SIZE);
-			tp->mptcp->binder_gw_is_set = 1;
+					sizeof(u8) * MPTCP_GATEWAY_FP_SIZE);
+			used_gw->gw_is_set = 1;
 		} else {
-			memcpy(&tp->mptcp->binder_gw_fingerprint, &mptcp_gws->gw_list_fingerprint[i],
-					sizeof(u8) * MPTCP_BINDER_GATEWAY_FP_SIZE);
-			tp->mptcp->binder_gw_is_set = 1;
+			memcpy(&used_gw->gw_fingerprint, &mptcp_gws->gw_list_fingerprint[i],
+					sizeof(u8) * MPTCP_GATEWAY_FP_SIZE);
+			used_gw->gw_is_set = 1;
 		}
 		kfree(opt);
 	}
@@ -442,7 +451,7 @@ static int mptcp_update_mpcb_gateway_list_ipv6(struct mptcp_cb * mpcb) {
 			for (j = 0; j < MPTCP_GATEWAY_MAX_LISTS; ++j)
 				if (!memcmp(&mptcp_gws6->gw_list_fingerprint[i],
 						&fmp->list_fingerprints.gw_list_fingerprint6[j],
-						sizeof(u8) * MPTCP_BINDER_GATEWAY_FP_SIZE) && !tmp_used[j]) {
+						sizeof(u8) * MPTCP_GATEWAY_FP_SIZE) && !tmp_used[j]) {
 					tmp_avail[i] = fmp->list_fingerprints.gw_list_avail6[j];
 					tmp_used[j] = 1;
 					break;
@@ -452,7 +461,7 @@ static int mptcp_update_mpcb_gateway_list_ipv6(struct mptcp_cb * mpcb) {
 
 	memcpy(&fmp->list_fingerprints.gw_list_fingerprint6,
 			&mptcp_gws6->gw_list_fingerprint,
-			sizeof(u8) * MPTCP_GATEWAY_MAX_LISTS * MPTCP_BINDER_GATEWAY_FP_SIZE);
+			sizeof(u8) * MPTCP_GATEWAY_MAX_LISTS * MPTCP_GATEWAY_FP_SIZE);
 	memcpy(&fmp->list_fingerprints.gw_list_avail6, tmp_avail,
 			sizeof(u8) * MPTCP_GATEWAY_MAX_LISTS);
 	fmp->list_fingerprints.timestamp6 = mptcp_gws6->timestamp;
@@ -480,6 +489,7 @@ static void mptcp_v6_add_rh0(struct sock * sk, struct sockaddr_in6 *rem)
 	char * opt = NULL;
 	struct tcp_sock * tp = tcp_sk(sk);
 	struct binder_priv *fmp = (struct binder_priv *)&tp->mpcb->mptcp_pm[0];
+	struct binder_used_gw *used_gw = (struct binder_used_gw *)&tp->mptcp->mptcp_pm_sock[0];
 
 	/*
 	 * Read lock: multiple sockets can read LSRR addresses at the same time,
@@ -534,14 +544,14 @@ static void mptcp_v6_add_rh0(struct sock * sk, struct sockaddr_in6 *rem)
 		 */
 		if (tp->mpcb != NULL) {
 			fmp->list_fingerprints.gw_list_avail6[i] = 0;
-			memcpy(&tp->mptcp->binder_gw_fingerprint,
+			memcpy(&used_gw->gw_fingerprint,
 					&fmp->list_fingerprints.gw_list_fingerprint6[0],
-					sizeof(u8) * MPTCP_BINDER_GATEWAY_FP_SIZE);
-			tp->mptcp->binder_gw_is_set = 1;
+					sizeof(u8) * MPTCP_GATEWAY_FP_SIZE);
+			used_gw->gw_is_set = 1;
 		} else {
-			memcpy(&tp->mptcp->binder_gw_fingerprint, &mptcp_gws6->gw_list_fingerprint[i],
-					sizeof(u8) * MPTCP_BINDER_GATEWAY_FP_SIZE);
-			tp->mptcp->binder_gw_is_set = 1;
+			memcpy(&used_gw->gw_fingerprint, &mptcp_gws6->gw_list_fingerprint[i],
+					sizeof(u8) * MPTCP_GATEWAY_FP_SIZE);
+			used_gw->gw_is_set = 1;
 		}
 		kfree(opt);
 	}
