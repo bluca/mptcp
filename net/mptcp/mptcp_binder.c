@@ -882,7 +882,7 @@ static void binder_unregister(void)
 module_init(binder_register);
 module_exit(binder_unregister);
 
-MODULE_AUTHOR("Luca Boccassi, Duncan Eastoe");
+MODULE_AUTHOR("Luca Boccassi, Duncan Eastoe, Christoph Paasch (ndiffports)");
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("BINDER MPTCP");
 MODULE_VERSION("0.1");
