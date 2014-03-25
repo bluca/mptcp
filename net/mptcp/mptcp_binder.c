@@ -298,7 +298,7 @@ static void mptcp_v4_add_lsrr(struct sock * sk, struct in_addr rem)
 		if (tp->mpcb != NULL) {
 			fmp->list_fingerprints.gw_list_avail[i] = 0;
 			memcpy(&used_gw->gw_fingerprint,
-					&fmp->list_fingerprints.gw_list_fingerprint[0],
+					&fmp->list_fingerprints.gw_list_fingerprint[i],
 					sizeof(u8) * MPTCP_GATEWAY_FP_SIZE);
 			used_gw->gw_is_set = 1;
 		} else {
