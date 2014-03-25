@@ -245,23 +245,13 @@ static void mptcp_v4_add_lsrr(struct sock * sk, struct in_addr rem)
 	 */
 	read_lock(&mptcp_gws_lock);
 
-	/*
-	 * Added for main subflow support. If this socket is the first of a MPTCP
-	 * connection, all the paths are free to take.
-	 */
-	if (tp->mpcb != NULL) {
-		if (mptcp_update_mpcb_gateway_list_ipv4(tp->mpcb))
-			goto error;
+	if (mptcp_update_mpcb_gateway_list_ipv4(tp->mpcb))
+		goto error;
 
-		for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i)
-			if (fmp->list_fingerprints.gw_list_avail[i] == 1
-					&& mptcp_gws->len[i] > 0)
-				break;
-	} else {
-		for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i)
-			if (mptcp_gws->len[i] > 0)
-				break;
-	}
+	for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i)
+		if (fmp->list_fingerprints.gw_list_avail[i] == 1
+				&& mptcp_gws->len[i] > 0)
+			break;
 
 	/*
 	 * Execution enters here only if a free path is found.
@@ -291,21 +281,12 @@ static void mptcp_v4_add_lsrr(struct sock * sk, struct in_addr rem)
 			goto error;
 		}
 
-		/*
-		 * If first socket MPTCP data structures are not allocated yet, so copy
-		 * data in the TCP data structure. Otherwise, uses MPTCP data.
-		 */
-		if (tp->mpcb != NULL) {
-			fmp->list_fingerprints.gw_list_avail[i] = 0;
-			memcpy(&used_gw->gw_fingerprint,
-					&fmp->list_fingerprints.gw_list_fingerprint[i],
-					sizeof(u8) * MPTCP_GATEWAY_FP_SIZE);
-			used_gw->gw_is_set = 1;
-		} else {
-			memcpy(&used_gw->gw_fingerprint, &mptcp_gws->gw_list_fingerprint[i],
-					sizeof(u8) * MPTCP_GATEWAY_FP_SIZE);
-			used_gw->gw_is_set = 1;
-		}
+		fmp->list_fingerprints.gw_list_avail[i] = 0;
+		memcpy(&used_gw->gw_fingerprint,
+				&fmp->list_fingerprints.gw_list_fingerprint[i],
+				sizeof(u8) * MPTCP_GATEWAY_FP_SIZE);
+		used_gw->gw_is_set = 1;
+
 		kfree(opt);
 	}
 
