@@ -207,6 +207,10 @@ struct mptcp_tcp_sock {
 
 	/* HMAC of the third ack */
 	char sender_mac[20];
+
+	/* Heavily (!) inspired by mptcp_pm[] in mptcp_cb */
+#define MPTCP_PM_SOCK_SIZE 24
+	u8 mptcp_pm_sock[MPTCP_PM_SOCK_SIZE] __aligned(8);
 };
 
 struct mptcp_tw {
@@ -231,6 +235,9 @@ struct mptcp_pm_ops {
 			     struct net *net);
 	void (*addr_signal)(struct sock *sk, unsigned *size,
 			    struct tcp_out_options *opts, struct sk_buff *skb);
+	void (*init_subsocket_v4)(struct sock *sk, struct mptcp_rem4 *rem);
+	void (*init_subsocket_v6)(struct sock *sk, struct mptcp_rem6 *rem);
+	void (*del_subsocket)(struct sock *sk);
 
 	char 		name[MPTCP_PM_NAME_MAX];
 	struct module 	*owner;
@@ -278,7 +285,7 @@ struct mptcp_cb {
 
 	u8 dfin_path_index;
 
-#define MPTCP_PM_SIZE 320
+#define MPTCP_PM_SIZE 640
 	u8 mptcp_pm[MPTCP_PM_SIZE] __aligned(8);
 	struct mptcp_pm_ops *pm_ops;
 
