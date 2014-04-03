@@ -159,7 +159,7 @@ static void set_gateway_available(struct mptcp_cb *mpcb, struct tcp_sock *tp)
 					}
 				}
 			} else {
-	#if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
+#if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
 				for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i) {
 					if (fmp->list_fingerprints->gw_list_avail6[i] == 0 &&
 							!memcmp(&binder_sock_priv->used_gw->gw_fingerprint,
@@ -169,7 +169,7 @@ static void set_gateway_available(struct mptcp_cb *mpcb, struct tcp_sock *tp)
 						break;
 					}
 				}
-	#endif /* CONFIG_MPTCP_BINDER_IPV6 */
+#endif /* CONFIG_MPTCP_BINDER_IPV6 */
 			}
 		}
 		
