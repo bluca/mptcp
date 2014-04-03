@@ -209,7 +209,7 @@ struct mptcp_tcp_sock {
 	char sender_mac[20];
 
 	 /* Heavily (!) inspired by mptcp_pm[] in mptcp_cb */
-#define MPTCP_PM_SOCK_SIZE 24
+#define MPTCP_PM_SOCK_SIZE 8
 	u8 mptcp_pm_sock[MPTCP_PM_SOCK_SIZE] __aligned(8);
 };
 
