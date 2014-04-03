@@ -71,7 +71,7 @@ struct binder_priv {
 	/* Lists of paths to gateways for LSRR, 0 if unavailabe/1 if available,
 	 * and fingerprints for each list, to check on update from sysctl.
 	 * */
-	struct mptcp_gw_list_fps_and_disp list_fingerprints;
+	struct mptcp_gw_list_fps_and_disp *list_fingerprints;
 };
 
 static struct mptcp_gw_list * mptcp_gws;
@@ -145,22 +145,22 @@ static void set_gateway_available(struct mptcp_cb *mpcb, struct tcp_sock *tp)
 	if (used_gw->gw_is_set == 1) {
 		if (mpcb->meta_sk->sk_family == AF_INET || mptcp_v6_is_v4_mapped(mpcb->meta_sk)) {
 			for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i) {
-				if (fmp->list_fingerprints.gw_list_avail[i] == 0 &&
+				if (fmp->list_fingerprints->gw_list_avail[i] == 0 &&
 						!memcmp(&used_gw->gw_fingerprint,
-						&fmp->list_fingerprints.gw_list_fingerprint[i],
+						&fmp->list_fingerprints->gw_list_fingerprint[i],
 						sizeof(u8) * MPTCP_GATEWAY_FP_SIZE)) {
-					fmp->list_fingerprints.gw_list_avail[i] = 1;
+					fmp->list_fingerprints->gw_list_avail[i] = 1;
 					break;
 				}
 			}
 		} else {
 #if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
 			for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i) {
-				if (fmp->list_fingerprints.gw_list_avail6[i] == 0 &&
+				if (fmp->list_fingerprints->gw_list_avail6[i] == 0 &&
 						!memcmp(&used_gw->gw_fingerprint,
-						&fmp->list_fingerprints.gw_list_fingerprint6[i],
+						&fmp->list_fingerprints->gw_list_fingerprint6[i],
 						sizeof(u8) * MPTCP_GATEWAY_FP_SIZE)) {
-					fmp->list_fingerprints.gw_list_avail6[i] = 1;
+					fmp->list_fingerprints->gw_list_avail6[i] = 1;
 					break;
 				}
 			}
@@ -177,7 +177,7 @@ static int mptcp_update_mpcb_gateway_list_ipv4(struct mptcp_cb * mpcb) {
 	u8 * tmp_avail = NULL, * tmp_used = NULL;
 	struct binder_priv *fmp = (struct binder_priv *)&mpcb->mptcp_pm[0];
 
-	if (fmp->list_fingerprints.timestamp >= mptcp_gws->timestamp)
+	if (fmp->list_fingerprints->timestamp >= mptcp_gws->timestamp)
 		return 0;
 
 	if ((tmp_avail = kzalloc(sizeof(u8) * MPTCP_GATEWAY_MAX_LISTS,
@@ -198,21 +198,21 @@ static int mptcp_update_mpcb_gateway_list_ipv4(struct mptcp_cb * mpcb) {
 			tmp_avail[i] = 1;
 			for (j = 0; j < MPTCP_GATEWAY_MAX_LISTS; ++j)
 				if (!memcmp(&mptcp_gws->gw_list_fingerprint[i],
-						&fmp->list_fingerprints.gw_list_fingerprint[j],
+						&fmp->list_fingerprints->gw_list_fingerprint[j],
 						sizeof(u8) * MPTCP_GATEWAY_FP_SIZE) && !tmp_used[j]) {
-					tmp_avail[i] = fmp->list_fingerprints.gw_list_avail[j];
+					tmp_avail[i] = fmp->list_fingerprints->gw_list_avail[j];
 					tmp_used[j] = 1;
 					break;
 				}
 		}
 	}
 
-	memcpy(&fmp->list_fingerprints.gw_list_fingerprint,
+	memcpy(&fmp->list_fingerprints->gw_list_fingerprint,
 			&mptcp_gws->gw_list_fingerprint,
 			sizeof(u8) * MPTCP_GATEWAY_MAX_LISTS * MPTCP_GATEWAY_FP_SIZE);
-	memcpy(&fmp->list_fingerprints.gw_list_avail, tmp_avail,
+	memcpy(&fmp->list_fingerprints->gw_list_avail, tmp_avail,
 			sizeof(u8) * MPTCP_GATEWAY_MAX_LISTS);
-	fmp->list_fingerprints.timestamp = mptcp_gws->timestamp;
+	fmp->list_fingerprints->timestamp = mptcp_gws->timestamp;
 	kfree(tmp_avail);
 	kfree(tmp_used);
 
@@ -221,8 +221,7 @@ static int mptcp_update_mpcb_gateway_list_ipv4(struct mptcp_cb * mpcb) {
 error:
 	kfree(tmp_avail);
 	kfree(tmp_used);
-	memset(&fmp->list_fingerprints, 0,
-			sizeof(struct mptcp_gw_list_fps_and_disp));
+	kfree(fmp->list_fingerprints);
 	return -1;
 }
 
@@ -249,7 +248,7 @@ static void mptcp_v4_add_lsrr(struct sock * sk, struct in_addr rem)
 		goto error;
 
 	for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i)
-		if (fmp->list_fingerprints.gw_list_avail[i] == 1
+		if (fmp->list_fingerprints->gw_list_avail[i] == 1
 				&& mptcp_gws->len[i] > 0)
 			break;
 
@@ -281,9 +280,9 @@ static void mptcp_v4_add_lsrr(struct sock * sk, struct in_addr rem)
 			goto error;
 		}
 
-		fmp->list_fingerprints.gw_list_avail[i] = 0;
+		fmp->list_fingerprints->gw_list_avail[i] = 0;
 		memcpy(&used_gw->gw_fingerprint,
-				&fmp->list_fingerprints.gw_list_fingerprint[i],
+				&fmp->list_fingerprints->gw_list_fingerprint[i],
 				sizeof(u8) * MPTCP_GATEWAY_FP_SIZE);
 		used_gw->gw_is_set = 1;
 
@@ -410,7 +409,7 @@ static int mptcp_update_mpcb_gateway_list_ipv6(struct mptcp_cb * mpcb) {
 	u8 * tmp_avail = NULL, * tmp_used = NULL;
 	struct binder_priv *fmp = (struct binder_priv *)&mpcb->mptcp_pm[0];
 
-	if (fmp->list_fingerprints.timestamp >= mptcp_gws6->timestamp)
+	if (fmp->list_fingerprints->timestamp >= mptcp_gws6->timestamp)
 		return 0;
 
 	if ((tmp_avail = kzalloc(sizeof(u8) * MPTCP_GATEWAY_MAX_LISTS,
@@ -431,21 +430,21 @@ static int mptcp_update_mpcb_gateway_list_ipv6(struct mptcp_cb * mpcb) {
 			tmp_avail[i] = 1;
 			for (j = 0; j < MPTCP_GATEWAY_MAX_LISTS; ++j)
 				if (!memcmp(&mptcp_gws6->gw_list_fingerprint[i],
-						&fmp->list_fingerprints.gw_list_fingerprint6[j],
+						&fmp->list_fingerprints->gw_list_fingerprint6[j],
 						sizeof(u8) * MPTCP_GATEWAY_FP_SIZE) && !tmp_used[j]) {
-					tmp_avail[i] = fmp->list_fingerprints.gw_list_avail6[j];
+					tmp_avail[i] = fmp->list_fingerprints->gw_list_avail6[j];
 					tmp_used[j] = 1;
 					break;
 				}
 		}
 	}
 
-	memcpy(&fmp->list_fingerprints.gw_list_fingerprint6,
+	memcpy(&fmp->list_fingerprints->gw_list_fingerprint6,
 			&mptcp_gws6->gw_list_fingerprint,
 			sizeof(u8) * MPTCP_GATEWAY_MAX_LISTS * MPTCP_GATEWAY_FP_SIZE);
-	memcpy(&fmp->list_fingerprints.gw_list_avail6, tmp_avail,
+	memcpy(&fmp->list_fingerprints->gw_list_avail6, tmp_avail,
 			sizeof(u8) * MPTCP_GATEWAY_MAX_LISTS);
-	fmp->list_fingerprints.timestamp6 = mptcp_gws6->timestamp;
+	fmp->list_fingerprints->timestamp6 = mptcp_gws6->timestamp;
 	kfree(tmp_avail);
 	kfree(tmp_used);
 
@@ -454,8 +453,7 @@ static int mptcp_update_mpcb_gateway_list_ipv6(struct mptcp_cb * mpcb) {
 error:
 	kfree(tmp_avail);
 	kfree(tmp_used);
-	memset(&fmp->list_fingerprints, 0,
-			sizeof(struct mptcp_gw_list_fps_and_disp));
+	kfree(fmp->list_fingerprints);
 	return -1;
 }
 
@@ -482,7 +480,7 @@ static void mptcp_v6_add_rh0(struct sock * sk, struct sockaddr_in6 *rem)
 		goto error;
 
 	for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i)
-		if (fmp->list_fingerprints.gw_list_avail6[i] == 1
+		if (fmp->list_fingerprints->gw_list_avail6[i] == 1
 				&& mptcp_gws6->len[i] > 0)
 			break;
 
@@ -509,9 +507,9 @@ static void mptcp_v6_add_rh0(struct sock * sk, struct sockaddr_in6 *rem)
 			goto error;
 		}
 
-		fmp->list_fingerprints.gw_list_avail6[i] = 0;
+		fmp->list_fingerprints->gw_list_avail6[i] = 0;
 		memcpy(&used_gw->gw_fingerprint,
-				&fmp->list_fingerprints.gw_list_fingerprint6[i],
+				&fmp->list_fingerprints->gw_list_fingerprint6[i],
 				sizeof(u8) * MPTCP_GATEWAY_FP_SIZE);
 		used_gw->gw_is_set = 1;
 		
@@ -644,6 +642,11 @@ static void create_subflow_worker(struct work_struct *work)
 	struct mptcp_cb *mpcb = pm_priv->mpcb;
 	struct sock *meta_sk = mpcb->meta_sk;
 	int iter = 0;
+	
+	/*
+	 * Allocates and initialises LSRR/Routing Header variables.
+	 */
+	pm_priv->list_fingerprints = kzalloc(sizeof(struct mptcp_gw_list_fps_and_disp), GFP_KERNEL);
 
 next_subflow:
 	if (iter) {
@@ -703,12 +706,6 @@ static void binder_new_session(struct sock *meta_sk, u8 id)
 	/* Initialize workqueue-struct */
 	INIT_WORK(&fmp->subflow_work, create_subflow_worker);
 	fmp->mpcb = mpcb;
-
-	/*
-	 * Allocates and initialises LSRR/Routing Header variables.
-	 */
-	memset(&fmp->list_fingerprints, 0,
-			sizeof(struct mptcp_gw_list_fps_and_disp));
 }
 
 static void binder_create_subflows(struct sock *meta_sk)
