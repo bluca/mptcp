@@ -286,6 +286,8 @@ static int mptcp_parse_gateway_ipv4(char * gateways)
 		}
 	}
 
+	sysctl_mptcp_binder_ndiffports = k+1;
+
 	kfree(tmp_string);
 	write_unlock(&mptcp_gws_lock);
 
@@ -437,6 +439,8 @@ static int mptcp_parse_gateway_ipv6(char * gateways)
 			++j;
 		}
 	}
+
+	sysctl_mptcp_binder_ndiffports = k+1;
 
 	kfree(tmp_string);
 	write_unlock(&mptcp_gws6_lock);
