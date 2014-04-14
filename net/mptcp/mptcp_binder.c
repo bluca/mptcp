@@ -63,8 +63,7 @@ static char sysctl_mptcp_binder_gateways6[MPTCP_GATEWAY6_SYSCTL_MAX_LEN] __read_
 #endif /* CONFIG_MPTCP_BINDER_IPV6 */
 
 static int mptcp_get_avail_list_ipv4(struct sock *sk) {
-	int i, j, sock_num, opt_ret, len;
-	u8 list_free;
+	int i, j, sock_num, list_free, opt_ret, opt_len;
 	struct tcp_sock *tp;
 	unsigned char *opt = NULL, *opt_ptr, *opt_end_ptr;
 	
@@ -83,10 +82,11 @@ static int mptcp_get_avail_list_ipv4(struct sock *sk) {
 			printk("Sock\n");
 			sock_num++;
 			
-			/* Reset len and options buffer, then retrieve from socket */
-			len = MAX_IPOPTLEN;
+			/* Reset length and options buffer, then retrieve from socket */
+			opt_len = MAX_IPOPTLEN;
 			memset(opt, 0, MAX_IPOPTLEN);
-			opt_ret = ip_getsockopt((struct sock *)tp, IPPROTO_IP, IP_OPTIONS, opt, &len);
+			opt_ret = ip_getsockopt((struct sock *)tp, IPPROTO_IP,
+				IP_OPTIONS, opt, &opt_len);
 			if (opt_ret < 0) {
 				mptcp_debug(KERN_ERR "%s: MPTCP subsocket getsockopt() IP_OPTIONS "
 				"failed, error %d\n", __func__, opt_ret);
@@ -94,11 +94,11 @@ static int mptcp_get_avail_list_ipv4(struct sock *sk) {
 			}
 
 			/* If socket has no options, it has no stake in this list */
-			if (len == 0) {
+			if (opt_len == 0) {
 				list_free++;
 			} else {
 				/* Iterate options buffer */
-				for (opt_ptr = &opt[0]; opt_ptr < &opt[len]; opt_ptr++) {
+				for (opt_ptr = &opt[0]; opt_ptr < &opt[opt_len]; opt_ptr++) {
 					printk("%u\n", *opt_ptr);
 					
 					if (*opt_ptr == IPOPT_LSRR) {
@@ -111,20 +111,27 @@ static int mptcp_get_avail_list_ipv4(struct sock *sk) {
 						opt_ptr += 3;
 						j = 0;
 						
-						/* Iterate if we are still inside options list and 
-						 * sysctl list */
-						while(opt_ptr < opt_end_ptr && j < mptcp_gws->len[i]) {
-							printk("%pI4\n", opt_ptr);
-							
-							/* If there is a different address, this list must 
-							 * not be set on this socket */
-							if (memcmp(&mptcp_gws->list[i][j], opt_ptr, 4)) {
-								list_free++;
+						/* Different length lists cannot be the same */
+						if ((opt_end_ptr-opt_ptr)/4 != mptcp_gws->len[i]) {
+							printk("Diff length\n");
+							list_free++;
+						}
+						else {							
+							/* Iterate if we are still inside options list and 
+							 * sysctl list */
+							while(opt_ptr < opt_end_ptr && j < mptcp_gws->len[i]) {
+								printk("%pI4\n", opt_ptr);
+								
+								/* If there is a different address, this list must 
+								 * not be set on this socket */
+								if (memcmp(&mptcp_gws->list[i][j], opt_ptr, 4)) {
+									list_free++;
+								}
+								
+								/* Jump 4 bytes to next address */
+								opt_ptr += 4;
+								j++;
 							}
-							
-							/* Jump 4 bytes to next address */
-							opt_ptr += 4;
-							j++;
 						}
 						break;
 					}
