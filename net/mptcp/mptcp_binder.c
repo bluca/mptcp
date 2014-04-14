@@ -62,12 +62,10 @@ static rwlock_t mptcp_gws6_lock;
 static char sysctl_mptcp_binder_gateways6[MPTCP_GATEWAY6_SYSCTL_MAX_LEN] __read_mostly;
 #endif /* CONFIG_MPTCP_BINDER_IPV6 */
 
-static int mptcp_get_avail_list_ipv4(struct sock *sk) {
+static int mptcp_get_avail_list_ipv4(struct sock *sk, unsigned char *opt) {
 	int i, j, sock_num, list_free, opt_ret, opt_len;
 	struct tcp_sock *tp;
-	unsigned char *opt = NULL, *opt_ptr, *opt_end_ptr;
-	
-	opt = kmalloc(MAX_IPOPTLEN, GFP_KERNEL);
+	unsigned char *opt_ptr, *opt_end_ptr;
 	
 	for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i) {
 		if (mptcp_gws->len[i] == 0)
@@ -146,10 +144,10 @@ static int mptcp_get_avail_list_ipv4(struct sock *sk) {
 			break;
 	}
 	
-	kfree(opt);
+	memset(opt, 0, MAX_IPOPTLEN);
 	return i;
 error:
-	kfree(opt);
+	memset(opt, 0, MAX_IPOPTLEN);
 	return -1;
 }
 
@@ -171,15 +169,16 @@ static void mptcp_v4_add_lsrr(struct sock *sk, struct in_addr rem)
 	 */
 	read_lock(&mptcp_gws_lock);
 	spin_lock(fmp->flow_lock);
+	
+	opt = kmalloc(MAX_IPOPTLEN, GFP_KERNEL);
 
-	i = mptcp_get_avail_list_ipv4(sk);
+	i = mptcp_get_avail_list_ipv4(sk, (unsigned char *) opt);
 	printk("Free list: %i\n", i);
 
 	/*
 	 * Execution enters here only if a free path is found.
 	 */
 	if (i >= 0) {
-		opt = kmalloc(MAX_IPOPTLEN, GFP_KERNEL);
 		opt[0] = IPOPT_NOP;
 		opt[1] = IPOPT_LSRR;
 		opt[2] = sizeof(mptcp_gws->list[i][0].s_addr) * (mptcp_gws->len[i] + 1)
