@@ -7,11 +7,10 @@
 #include <net/mptcp_v6.h>
 #endif
 
-#include <linux/jiffies.h>
 #include <linux/route.h>
 #include <linux/inet.h>
 #include <linux/mroute.h>
-#include <linux/cryptohash.h>
+#include <linux/spinlock_types.h>
 #include <net/inet_ecn.h>
 #include <net/route.h>
 #include <net/xfrm.h>
@@ -21,7 +20,6 @@
 #endif
 
 /* fprint of the list, to look it up set it available on socket close */
-#define MPTCP_GATEWAY_FP_SIZE	16
 #define MPTCP_GATEWAY_MAX_LISTS	10
 #define MPTCP_GATEWAY_LIST_MAX_LEN	6
 #define MPTCP_GATEWAY_SYSCTL_MAX_LEN	15 * MPTCP_GATEWAY_LIST_MAX_LEN * MPTCP_GATEWAY_MAX_LISTS
@@ -32,35 +30,15 @@
 
 struct mptcp_gw_list {
 	struct in_addr list[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_LIST_MAX_LEN];
-	u64 timestamp;
-	u8 gw_list_fingerprint[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_FP_SIZE];
 	u8 len[MPTCP_GATEWAY_MAX_LISTS];
 };
 
 #if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
 struct mptcp_gw_list6 {
 	struct in6_addr list[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_LIST_MAX_LEN6];
-	u64 timestamp;
-	u8 gw_list_fingerprint[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_FP_SIZE];
 	u8 len[MPTCP_GATEWAY_MAX_LISTS];
 };
 #endif /* CONFIG_MPTCP_BINDER_IPV6 */
-
-struct mptcp_gw_list_fps_and_disp {
-#if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
-	u64 timestamp6;
-	u8 gw_list_fingerprint6[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_FP_SIZE];
-	u8 gw_list_avail6[MPTCP_GATEWAY_MAX_LISTS];
-#endif /* CONFIG_MPTCP_BINDER_IPV6 */
-	u64 timestamp;
-	u8 gw_list_fingerprint[MPTCP_GATEWAY_MAX_LISTS][MPTCP_GATEWAY_FP_SIZE];
-	u8 gw_list_avail[MPTCP_GATEWAY_MAX_LISTS];
-};
-
-struct binder_used_gw {
-	u8 gw_fingerprint[MPTCP_GATEWAY_FP_SIZE];
-	u8 gw_is_set;
-};
 
 struct binder_priv {
 	/* Worker struct for subflow establishment */
@@ -68,14 +46,8 @@ struct binder_priv {
 
 	struct mptcp_cb *mpcb;
 
-	/* Lists of paths to gateways for LSRR, 0 if unavailabe/1 if available,
-	 * and fingerprints for each list, to check on update from sysctl.
-	 * */
-	struct mptcp_gw_list_fps_and_disp list_fingerprints;
+	spinlock_t *flow_lock;
 };
-
-static struct mptcp_gw_list * mptcp_gws;
-static rwlock_t mptcp_gws_lock;
 
 static struct mptcp_gw_list * mptcp_gws;
 static rwlock_t mptcp_gws_lock;
@@ -87,142 +59,90 @@ static char sysctl_mptcp_binder_gateways[MPTCP_GATEWAY_SYSCTL_MAX_LEN] __read_mo
 static struct mptcp_gw_list6 * mptcp_gws6;
 static rwlock_t mptcp_gws6_lock;
 
-static struct mptcp_gw_list6 * mptcp_gws6;
-static rwlock_t mptcp_gws6_lock;
-
 static char sysctl_mptcp_binder_gateways6[MPTCP_GATEWAY6_SYSCTL_MAX_LEN] __read_mostly;
 #endif /* CONFIG_MPTCP_BINDER_IPV6 */
 
-/* Computes fingerprint of a list of IP addresses (4/16 bytes integers),
- * used to compare newly parsed sysctl variable with old one.
- * PAGE_SIZE is hard limit (1024 ipv4 or 256 ipv6 addresses per list) */
-static int mptcp_calc_fingerprint_gateway_list(u8 * fingerprint, u8 * data,
-		size_t size)
-{
-	struct scatterlist * sg = NULL;
-	struct crypto_hash * tfm = NULL;
-	struct hash_desc desc;
-
-	if (size > PAGE_SIZE)
-		goto error;
-
-	if ((sg = kmalloc(sizeof(struct scatterlist), GFP_KERNEL)) == NULL)
-		goto error;
-
-	if ((tfm = crypto_alloc_hash("md5", 0, CRYPTO_ALG_ASYNC)) == NULL)
-		goto error;
-
-	sg_init_one(sg, (u8 *)data, size);
-
-	desc.tfm = tfm;
-	if (crypto_hash_init(&desc) != 0)
-		goto error;
-
-	if (crypto_hash_digest(&desc, sg, size, fingerprint) != 0)
-		goto error;
-
-	crypto_free_hash(tfm);
-	kfree(sg);
-
-	return 0;
-
-error:
-	crypto_free_hash(tfm);
-	kfree(sg);
-	return -1;
-}
-
-/*
- * Sets the used path to GW as available again. We check if the match was
- * actually claimed in case there are duplicates.
- */
-static void set_gateway_available(struct mptcp_cb *mpcb, struct tcp_sock *tp)
-{
-	int i;
-	struct binder_priv *fmp = (struct binder_priv *)&mpcb->mptcp_pm[0];
-	struct binder_used_gw *used_gw = (struct binder_used_gw *)&tp->mptcp->mptcp_pm_sock[0];
-
-	if (used_gw->gw_is_set == 1) {
-		if (mpcb->meta_sk->sk_family == AF_INET || mptcp_v6_is_v4_mapped(mpcb->meta_sk)) {
-			for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i) {
-				if (fmp->list_fingerprints.gw_list_avail[i] == 0 &&
-						!memcmp(&used_gw->gw_fingerprint,
-						&fmp->list_fingerprints.gw_list_fingerprint[i],
-						sizeof(u8) * MPTCP_GATEWAY_FP_SIZE)) {
-					fmp->list_fingerprints.gw_list_avail[i] = 1;
-					break;
-				}
-			}
-		} else {
-#if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
-			for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i) {
-				if (fmp->list_fingerprints.gw_list_avail6[i] == 0 &&
-						!memcmp(&used_gw->gw_fingerprint,
-						&fmp->list_fingerprints.gw_list_fingerprint6[i],
-						sizeof(u8) * MPTCP_GATEWAY_FP_SIZE)) {
-					fmp->list_fingerprints.gw_list_avail6[i] = 1;
-					break;
-				}
-			}
-#endif /* CONFIG_MPTCP_BINDER_IPV6 */
-		}
-	}
-}
-
-/*
- * Updates the list of addresses contained in the meta-socket data structures
- */
-static int mptcp_update_mpcb_gateway_list_ipv4(struct mptcp_cb * mpcb) {
-	int i, j;
-	u8 * tmp_avail = NULL, * tmp_used = NULL;
-	struct binder_priv *fmp = (struct binder_priv *)&mpcb->mptcp_pm[0];
-
-	if (fmp->list_fingerprints.timestamp >= mptcp_gws->timestamp)
-		return 0;
-
-	if ((tmp_avail = kzalloc(sizeof(u8) * MPTCP_GATEWAY_MAX_LISTS,
-			GFP_KERNEL)) == NULL)
-		goto error;
-	if ((tmp_used = kzalloc(sizeof(u8) * MPTCP_GATEWAY_MAX_LISTS,
-			GFP_KERNEL)) == NULL)
-		goto error;
-
-	/*
-	 * tmp_used: if any two lists are exactly equivalent then their fingerprint
-	 * is also equivalent. This means that, without remembering which has
-	 * already been seet, the following code would be broken, as only the first
-	 * old value of gw_list_avail would be written on both the new variables.
-	 */
+static int mptcp_get_avail_list_ipv4(struct sock *sk) {
+	int i, j, sock_num, opt_ret, len;
+	u8 list_free;
+	struct tcp_sock *tp;
+	unsigned char *opt = NULL, *opt_ptr, *opt_end_ptr;
+	
+	opt = kmalloc(MAX_IPOPTLEN, GFP_KERNEL);
+	
 	for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i) {
-		if (mptcp_gws->len[i] > 0) {
-			tmp_avail[i] = 1;
-			for (j = 0; j < MPTCP_GATEWAY_MAX_LISTS; ++j)
-				if (!memcmp(&mptcp_gws->gw_list_fingerprint[i],
-						&fmp->list_fingerprints.gw_list_fingerprint[j],
-						sizeof(u8) * MPTCP_GATEWAY_FP_SIZE) && !tmp_used[j]) {
-					tmp_avail[i] = fmp->list_fingerprints.gw_list_avail[j];
-					tmp_used[j] = 1;
-					break;
+		if (mptcp_gws->len[i] == 0)
+			goto error;
+			
+		sock_num = 0;
+		list_free = 0;
+		
+		/* Loop through all sub-sockets in this connection */
+		tp = tcp_sk(sk)->mpcb->connection_list->mptcp->next;
+		while (tp != NULL) {
+			printk("Sock\n");
+			sock_num++;
+			
+			/* Reset len and options buffer, then retrieve from socket */
+			len = MAX_IPOPTLEN;
+			memset(opt, 0, MAX_IPOPTLEN);
+			opt_ret = ip_getsockopt((struct sock *)tp, IPPROTO_IP, IP_OPTIONS, opt, &len);
+			if (opt_ret < 0) {
+				mptcp_debug(KERN_ERR "%s: MPTCP subsocket getsockopt() IP_OPTIONS "
+				"failed, error %d\n", __func__, opt_ret);
+				goto error;
+			}
+
+			/* If socket has no options, it has no stake in this list */
+			if (len == 0) {
+				list_free++;
+			} else {
+				/* Iterate options buffer */
+				for (opt_ptr = &opt[0]; opt_ptr < &opt[len]; opt_ptr++) {
+					printk("%u\n", *opt_ptr);
+					
+					if (*opt_ptr == IPOPT_LSRR) {
+						printk("LSRR\n");
+						
+						/* Pointer to the 2nd to last address */
+						opt_end_ptr = opt_ptr+(*(opt_ptr+1))-4;
+						
+						/* Addresses start 3 bytes after type offset */
+						opt_ptr += 3;
+						j = 0;
+						
+						/* Iterate if we are still inside options list and 
+						 * sysctl list */
+						while(opt_ptr < opt_end_ptr && j < mptcp_gws->len[i]) {
+							printk("%pI4\n", opt_ptr);
+							
+							/* If there is a different address, this list must 
+							 * not be set on this socket */
+							if (memcmp(&mptcp_gws->list[i][j], opt_ptr, 4)) {
+								list_free++;
+							}
+							
+							/* Jump 4 bytes to next address */
+							opt_ptr += 4;
+							j++;
+						}
+						break;
+					}
 				}
+			}
+			
+			tp = tp->mptcp->next;
 		}
+		
+		/* Free list found if all sockets agree */
+		if (sock_num == list_free)
+			break;
 	}
-
-	memcpy(&fmp->list_fingerprints.gw_list_fingerprint,
-			&mptcp_gws->gw_list_fingerprint,
-			sizeof(u8) * MPTCP_GATEWAY_MAX_LISTS * MPTCP_GATEWAY_FP_SIZE);
-	memcpy(&fmp->list_fingerprints.gw_list_avail, tmp_avail,
-			sizeof(u8) * MPTCP_GATEWAY_MAX_LISTS);
-	fmp->list_fingerprints.timestamp = mptcp_gws->timestamp;
-	kfree(tmp_avail);
-	kfree(tmp_used);
-
-	return 0;
-
+	
+	kfree(opt);
+	return i;
 error:
-	kfree(tmp_avail);
-	kfree(tmp_used);
-	memset(&fmp->list_fingerprints, 0,
-			sizeof(struct mptcp_gw_list_fps_and_disp));
+	kfree(opt);
 	return -1;
 }
 
@@ -231,32 +151,27 @@ error:
  *  to make sure it's up to date. In case of error, all the lists are
  *  marked as unavailable and the subflow's fingerprint is set to 0.
  */
-static void mptcp_v4_add_lsrr(struct sock * sk, struct in_addr rem)
+static void mptcp_v4_add_lsrr(struct sock *sk, struct in_addr rem)
 {
 	int i, j, ret;
 	char * opt = NULL;
 	struct tcp_sock * tp = tcp_sk(sk);
 	struct binder_priv *fmp = (struct binder_priv *)&tp->mpcb->mptcp_pm[0];
-	struct binder_used_gw *used_gw = (struct binder_used_gw *)&tp->mptcp->mptcp_pm_sock[0];
 
 	/*
 	 * Read lock: multiple sockets can read LSRR addresses at the same time,
 	 * but writes are done in mutual exclusion.
 	 */
 	read_lock(&mptcp_gws_lock);
+	spin_lock(fmp->flow_lock);
 
-	if (mptcp_update_mpcb_gateway_list_ipv4(tp->mpcb))
-		goto error;
-
-	for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i)
-		if (fmp->list_fingerprints.gw_list_avail[i] == 1
-				&& mptcp_gws->len[i] > 0)
-			break;
+	i = mptcp_get_avail_list_ipv4(sk);
+	printk("Free list: %i\n", i);
 
 	/*
 	 * Execution enters here only if a free path is found.
 	 */
-	if (i < MPTCP_GATEWAY_MAX_LISTS) {
+	if (i >= 0) {
 		opt = kmalloc(MAX_IPOPTLEN, GFP_KERNEL);
 		opt[0] = IPOPT_NOP;
 		opt[1] = IPOPT_LSRR;
@@ -281,24 +196,19 @@ static void mptcp_v4_add_lsrr(struct sock * sk, struct in_addr rem)
 			goto error;
 		}
 
-		fmp->list_fingerprints.gw_list_avail[i] = 0;
-		memcpy(&used_gw->gw_fingerprint,
-				&fmp->list_fingerprints.gw_list_fingerprint[i],
-				sizeof(u8) * MPTCP_GATEWAY_FP_SIZE);
-		used_gw->gw_is_set = 1;
-
 		kfree(opt);
 	}
-
+	
+	spin_unlock(fmp->flow_lock);
 	read_unlock(&mptcp_gws_lock);
 	return;
 
 error:
+	spin_unlock(fmp->flow_lock);
 	read_unlock(&mptcp_gws_lock);
 	kfree(opt);
 	return;
 }
-
 
 /*
  *  Parses gateways string for a list of paths to different
@@ -367,18 +277,7 @@ static int mptcp_parse_gateway_ipv4(char * gateways)
 				}
 			}
 
-			/*
-			 * If the list is over or the SYSCTL string is over, create a fingerprint.
-			 */
 			if (gateways[i] == '-' || gateways[i] == '\0') {
-				if (mptcp_calc_fingerprint_gateway_list(
-						(u8 *)&mptcp_gws->gw_list_fingerprint[k],
-						(u8 *)&mptcp_gws->list[k][0],
-						sizeof(mptcp_gws->list[k][0].s_addr) *
-						mptcp_gws->len[k])) {
-					goto error;
-				}
-				mptcp_debug("mptcp_parse_gateway_list fingerprint calculated for list %i\n", k);
 				++k;
 			}
 		} else {
@@ -387,7 +286,6 @@ static int mptcp_parse_gateway_ipv4(char * gateways)
 		}
 	}
 
-	mptcp_gws->timestamp = get_jiffies_64();
 	kfree(tmp_string);
 	write_unlock(&mptcp_gws_lock);
 
@@ -401,61 +299,7 @@ error:
 	return -1;
 }
 
-#if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
-/*
- * Updates the list of addresses contained in the meta-socket data structures
- */
-static int mptcp_update_mpcb_gateway_list_ipv6(struct mptcp_cb * mpcb) {
-	int i, j;
-	u8 * tmp_avail = NULL, * tmp_used = NULL;
-	struct binder_priv *fmp = (struct binder_priv *)&mpcb->mptcp_pm[0];
-
-	if (fmp->list_fingerprints.timestamp >= mptcp_gws6->timestamp)
-		return 0;
-
-	if ((tmp_avail = kzalloc(sizeof(u8) * MPTCP_GATEWAY_MAX_LISTS,
-			GFP_KERNEL)) == NULL)
-		goto error;
-	if ((tmp_used = kzalloc(sizeof(u8) * MPTCP_GATEWAY_MAX_LISTS,
-			GFP_KERNEL)) == NULL)
-		goto error;
-
-	/*
-	 * tmp_used: if any two lists are exactly equivalent then their fingerprint
-	 * is also equivalent. This means that, without remembering which has
-	 * already been seet, the following code would be broken, as only the first
-	 * old value of gw_list_avail would be written on both the new variables.
-	 */
-	for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i) {
-		if (mptcp_gws6->len[i] > 0) {
-			tmp_avail[i] = 1;
-			for (j = 0; j < MPTCP_GATEWAY_MAX_LISTS; ++j)
-				if (!memcmp(&mptcp_gws6->gw_list_fingerprint[i],
-						&fmp->list_fingerprints.gw_list_fingerprint6[j],
-						sizeof(u8) * MPTCP_GATEWAY_FP_SIZE) && !tmp_used[j]) {
-					tmp_avail[i] = fmp->list_fingerprints.gw_list_avail6[j];
-					tmp_used[j] = 1;
-					break;
-				}
-		}
-	}
-
-	memcpy(&fmp->list_fingerprints.gw_list_fingerprint6,
-			&mptcp_gws6->gw_list_fingerprint,
-			sizeof(u8) * MPTCP_GATEWAY_MAX_LISTS * MPTCP_GATEWAY_FP_SIZE);
-	memcpy(&fmp->list_fingerprints.gw_list_avail6, tmp_avail,
-			sizeof(u8) * MPTCP_GATEWAY_MAX_LISTS);
-	fmp->list_fingerprints.timestamp6 = mptcp_gws6->timestamp;
-	kfree(tmp_avail);
-	kfree(tmp_used);
-
-	return 0;
-
-error:
-	kfree(tmp_avail);
-	kfree(tmp_used);
-	memset(&fmp->list_fingerprints, 0,
-			sizeof(struct mptcp_gw_list_fps_and_disp));
+static int mptcp_get_avail_list_ipv6(struct mptcp_cb *mpcb) {
 	return -1;
 }
 
@@ -470,26 +314,20 @@ static void mptcp_v6_add_rh0(struct sock * sk, struct sockaddr_in6 *rem)
 	char * opt = NULL;
 	struct tcp_sock * tp = tcp_sk(sk);
 	struct binder_priv *fmp = (struct binder_priv *)&tp->mpcb->mptcp_pm[0];
-	struct binder_used_gw *used_gw = (struct binder_used_gw *)&tp->mptcp->mptcp_pm_sock[0];
 
 	/*
 	 * Read lock: multiple sockets can read LSRR addresses at the same time,
 	 * but writes are done in mutual exclusion.
 	 */
 	read_lock(&mptcp_gws6_lock);
+	spin_lock(fmp->flow_lock);
 
-	if (mptcp_update_mpcb_gateway_list_ipv6(tp->mpcb))
-		goto error;
-
-	for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i)
-		if (fmp->list_fingerprints.gw_list_avail6[i] == 1
-				&& mptcp_gws6->len[i] > 0)
-			break;
+	i = mptcp_get_avail_list_ipv6(tp->mpcb);
 
 	/*
 	 * Execution enters here only if a free path is found.
 	 */
-	if (i < MPTCP_GATEWAY_MAX_LISTS) {
+	if (i >= 0) {
 		opt = kzalloc(24, GFP_KERNEL);
 		opt[1] = 2; // Hdr Ext Len
 		opt[2] = 0; // Routing Type
@@ -508,16 +346,11 @@ static void mptcp_v6_add_rh0(struct sock * sk, struct sockaddr_in6 *rem)
 			"failed, error %d\n", __func__, ret);
 			goto error;
 		}
-
-		fmp->list_fingerprints.gw_list_avail6[i] = 0;
-		memcpy(&used_gw->gw_fingerprint,
-				&fmp->list_fingerprints.gw_list_fingerprint6[i],
-				sizeof(u8) * MPTCP_GATEWAY_FP_SIZE);
-		used_gw->gw_is_set = 1;
 		
 		kfree(opt);
 	}
 
+	spin_unlock(fmp->flow_lock);
 	read_unlock(&mptcp_gws6_lock);
 	return;
 
@@ -534,6 +367,7 @@ error:
  *  themselves must be separated by "-". Returns -1 in case one or more of the
  *  addresses is not a valid ipv4/6 address.
  */
+#if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
 static int mptcp_parse_gateway_ipv6(char * gateways)
 {
 	int i, j, k, ret;
@@ -595,18 +429,7 @@ static int mptcp_parse_gateway_ipv6(char * gateways)
 				}
 			}
 
-			/*
-			 * If the list is over or the SYSCTL string is over, create a fingerprint.
-			 */
 			if (gateways[i] == '-' || gateways[i] == '\0') {
-				if (mptcp_calc_fingerprint_gateway_list(
-						(u8 *)&mptcp_gws6->gw_list_fingerprint[k],
-						(u8 *)&mptcp_gws6->list[k][0],
-						sizeof(mptcp_gws6->list[k][0].s6_addr) *
-						mptcp_gws6->len[k])) {
-					goto error;
-				}
-				mptcp_debug("mptcp_parse_gateway_list fingerprint calculated for list %i\n", k);
 				++k;
 			}
 		} else {
@@ -615,7 +438,6 @@ static int mptcp_parse_gateway_ipv6(char * gateways)
 		}
 	}
 
-	mptcp_gws6->timestamp = get_jiffies_64();
 	kfree(tmp_string);
 	write_unlock(&mptcp_gws6_lock);
 	return 0;
@@ -699,16 +521,13 @@ static void binder_new_session(struct sock *meta_sk, u8 id)
 {
 	struct mptcp_cb *mpcb = tcp_sk(meta_sk)->mpcb;
 	struct binder_priv *fmp = (struct binder_priv *)&mpcb->mptcp_pm[0];
+	static DEFINE_SPINLOCK(flow_lock);
 
 	/* Initialize workqueue-struct */
 	INIT_WORK(&fmp->subflow_work, create_subflow_worker);
 	fmp->mpcb = mpcb;
-
-	/*
-	 * Allocates and initialises LSRR/Routing Header variables.
-	 */
-	memset(&fmp->list_fingerprints, 0,
-			sizeof(struct mptcp_gw_list_fps_and_disp));
+	
+	fmp->flow_lock = &flow_lock;
 }
 
 static void binder_create_subflows(struct sock *meta_sk)
@@ -800,7 +619,6 @@ static struct mptcp_pm_ops binder __read_mostly = {
 #if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
 	.init_subsocket_v6 = mptcp_v6_add_rh0,
 #endif /* CONFIG_MPTCP_BINDER_IPV6 */
-	.del_subsocket = set_gateway_available,
 	.name = "binder",
 	.owner = THIS_MODULE,
 };
@@ -852,7 +670,6 @@ static int __init binder_register(void)
 #endif /* CONFIG_MPTCP_BINDER_IPV6 */
 
 	BUILD_BUG_ON(sizeof(struct binder_priv) > MPTCP_PM_SIZE);
-	BUILD_BUG_ON(sizeof(struct binder_used_gw) > MPTCP_PM_SOCK_SIZE);
 
 	mptcp_sysctl_binder = register_net_sysctl(&init_net, "net/mptcp", binder_table);
 	if (!mptcp_sysctl_binder)

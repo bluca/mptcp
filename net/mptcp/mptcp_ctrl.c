@@ -1245,9 +1245,6 @@ void mptcp_del_sock(struct sock *sk)
 		    __func__, mpcb->mptcp_loc_token, tp->mptcp->path_index,
 		    sk->sk_state, is_meta_sk(sk));
 
-	if (mpcb->pm_ops->del_subsocket)
-		mpcb->pm_ops->del_subsocket(mpcb, tp);
-
 	if (tp_prev == tp) {
 		mpcb->connection_list = tp->mptcp->next;
 	} else {
