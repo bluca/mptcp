@@ -144,6 +144,9 @@ static int mptcp_get_avail_list_ipv4(struct sock *sk, unsigned char *opt) {
 			break;
 	}
 	
+	if (i >= MPTCP_GATEWAY_MAX_LISTS)
+		goto error;
+	
 	memset(opt, 0, MAX_IPOPTLEN);
 	return i;
 error:
