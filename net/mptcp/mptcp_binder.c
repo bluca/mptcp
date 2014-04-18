@@ -17,6 +17,7 @@
 #include <net/compat.h>
 #if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
 #include <net/transp_v6.h>
+#include <linux/ipv6.h>
 #endif
 
 /* fprint of the list, to look it up set it available on socket close */
@@ -308,22 +309,85 @@ error:
 	return -1;
 }
 
-static int mptcp_get_avail_list_ipv6(struct mptcp_cb *mpcb) {
+#if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
+static int mptcp_get_avail_list_ipv6(struct sock *sk, unsigned char *opt,
+		int opt_len)
+{
+	int i, sock_num, list_free, opt_ret;
+	struct tcp_sock *tp;
+	struct ipv6_pinfo *np;
+
+	for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i) {
+		if (mptcp_gws->len[i] == 0)
+			goto error;
+
+		sock_num = 0;
+		list_free = 0;
+
+		/* Loop through all sub-sockets in this connection */
+		tp = tcp_sk(sk)->mpcb->connection_list->mptcp->next;
+		while (tp != NULL) {
+			printk("Sock\n");
+			sock_num++;
+
+			/* Reset length and options buffer, then retrieve from socket */
+			memset(opt, 0, opt_len);
+			opt_ret = ipv6_getsockopt((struct sock *)tp, IPPROTO_IPV6,
+					IPV6_RTHDR, opt, &opt_len);
+			if (opt_ret < 0) {
+				mptcp_debug(KERN_ERR "%s: MPTCP subsocket getsockopt() "
+				"IP_OPTIONS failed, error %d\n", __func__, opt_ret);
+				goto error;
+			}
+
+			/* If socket has no options, it has no stake in this list.
+			 * The hop address will be in the socket dest address, NOT
+			 * in the routing header.
+			 */
+			np = inet6_sk((struct sock *)tp);
+			if (opt_len == 0 || memcmp(&mptcp_gws->list[i][0], &np->daddr, 8)) {
+				list_free++;
+			} else {
+				/*
+				 * One socket using the list is enough to make it unusable.
+				 */
+				break;
+			}
+
+			tp = tp->mptcp->next;
+		}
+
+		/* Free list found if all sockets agree */
+		if (sock_num == list_free)
+			break;
+	}
+
+	if (i >= MPTCP_GATEWAY_MAX_LISTS)
+		goto error;
+
+	return i;
+
+error:
 	return -1;
 }
 
 /*
  * The list of addresses is parsed each time a new connection is opened, to
  *  to make sure it's up to date. In case of error, all the lists are
- *  marked as unavailable and the subflow's fingerprint is set to 0.
+ *  marked as unavailable.
  */
 static void mptcp_v6_add_rh0(struct sock * sk, struct sockaddr_in6 *rem)
 {
-	int i, ret;
+	int i, ret, opt_len;
 	char * opt = NULL;
 	struct tcp_sock * tp = tcp_sk(sk);
 	struct binder_priv *fmp = (struct binder_priv *)&tp->mpcb->mptcp_pm[0];
 
+	/*
+	 * Size of a routing header in bytes.
+	 */
+	opt_len = 24;
+	opt = kzalloc(opt_len, GFP_KERNEL);
 	/*
 	 * Read lock: multiple sockets can read LSRR addresses at the same time,
 	 * but writes are done in mutual exclusion.
@@ -331,39 +395,43 @@ static void mptcp_v6_add_rh0(struct sock * sk, struct sockaddr_in6 *rem)
 	read_lock(&mptcp_gws6_lock);
 	spin_lock(fmp->flow_lock);
 
-	i = mptcp_get_avail_list_ipv6(tp->mpcb);
+	i = mptcp_get_avail_list_ipv6(sk, (unsigned char *) opt, opt_len);
 
 	/*
 	 * Execution enters here only if a free path is found.
 	 */
 	if (i >= 0) {
-		opt = kzalloc(24, GFP_KERNEL);
-		opt[1] = 2; // Hdr Ext Len
+		memset(opt, 0, opt_len);
+		opt[1] = 2; // Hdr Ext Len, from rfc2460: 2x addresses in the header.
 		opt[2] = 0; // Routing Type
 		opt[3] = 1; // Segments Left
-		
+
 		/*
-		 * Insert home address after 4 zero set bytes
+		 * Insert dest address after 4 zero set bytes, following rfc2460
 		 */
 		memcpy(opt + 8, &rem->sin6_addr, sizeof(rem->sin6_addr));
-		memcpy(&rem->sin6_addr, &mptcp_gws6->list[0][0].s6_addr, sizeof(mptcp_gws6->list[0][0].s6_addr));
-		
-		ret = ipv6_setsockopt(sk, IPPROTO_IPV6, IPV6_RTHDR, opt, 24);
+		/*
+		 * Change dest address to next hop address
+		 */
+		memcpy(&rem->sin6_addr, &mptcp_gws6->list[i][0].s6_addr,
+				sizeof(mptcp_gws6->list[i][0].s6_addr));
+
+		ret = ipv6_setsockopt(sk, IPPROTO_IPV6, IPV6_RTHDR, opt, opt_len);
 
 		if (ret < 0) {
 			mptcp_debug(KERN_ERR "%s: MPTCP subsocket setsockopt() IPV6_RTHDR "
 			"failed, error %d\n", __func__, ret);
 			goto error;
 		}
-		
-		kfree(opt);
 	}
 
 	spin_unlock(fmp->flow_lock);
 	read_unlock(&mptcp_gws6_lock);
+	kfree(opt);
 	return;
 
 error:
+	spin_unlock(fmp->flow_lock);
 	read_unlock(&mptcp_gws6_lock);
 	kfree(opt);
 	return;
@@ -371,12 +439,11 @@ error:
 
 /*
  *  Parses gateways string for a list of paths to different
- *  gateways, and stores them for use with the Loose Source Routing (LSRR)
+ *  gateways, and stores them for use with the Routing Header Type 0
  *  socket option. Each list must have "," separated addresses, and the lists
  *  themselves must be separated by "-". Returns -1 in case one or more of the
- *  addresses is not a valid ipv4/6 address.
+ *  addresses is not a valid ipv6 address.
  */
-#if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
 static int mptcp_parse_gateway_ipv6(char * gateways)
 {
 	int i, j, k, ret;
