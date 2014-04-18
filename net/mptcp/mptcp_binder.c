@@ -213,19 +213,14 @@ static void mptcp_v4_add_lsrr(struct sock *sk, struct in_addr rem)
 		if (ret < 0) {
 			mptcp_debug(KERN_ERR "%s: MPTCP subsocket setsockopt() IP_OPTIONS "
 			"failed, error %d\n", __func__, ret);
-			goto error;
 		}
 	}
 
 	spin_unlock(fmp->flow_lock);
 	read_unlock(&mptcp_gws_lock);
 	kmem_cache_free(opt_slub_v4, opt);
-	return;
 
 error:
-	spin_unlock(fmp->flow_lock);
-	read_unlock(&mptcp_gws_lock);
-	kmem_cache_free(opt_slub_v4, opt);
 	return;
 }
 
@@ -243,7 +238,7 @@ static int mptcp_parse_gateway_ipv4(char * gateways)
 	struct in_addr tmp_addr;
 
 	if ((tmp_string = kzalloc(16, GFP_KERNEL)) == NULL)
-		goto error;
+		return -ENOMEM;
 
 	write_lock(&mptcp_gws_lock);
 
@@ -434,19 +429,13 @@ static void mptcp_v6_add_rh0(struct sock * sk, struct sockaddr_in6 *rem)
 		if (ret < 0) {
 			mptcp_debug(KERN_ERR "%s: MPTCP subsocket setsockopt() IPV6_RTHDR "
 			"failed, error %d\n", __func__, ret);
-			goto error;
 		}
 	}
-
 	spin_unlock(fmp->flow_lock);
 	read_unlock(&mptcp_gws6_lock);
 	kmem_cache_free(opt_slub_v6, opt);
-	return;
 
 error:
-	spin_unlock(fmp->flow_lock);
-	read_unlock(&mptcp_gws6_lock);
-	kmem_cache_free(opt_slub_v6, opt);
 	return;
 }
 
@@ -464,7 +453,7 @@ static int mptcp_parse_gateway_ipv6(char * gateways)
 	struct in6_addr tmp_addr;
 
 	if ((tmp_string = kzalloc(40, GFP_KERNEL)) == NULL)
-		goto error;
+		return -ENOMEM;
 
 	write_lock(&mptcp_gws6_lock);
 
