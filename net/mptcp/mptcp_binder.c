@@ -166,14 +166,13 @@ static void mptcp_v4_add_lsrr(struct sock *sk, struct in_addr rem)
 	struct tcp_sock * tp = tcp_sk(sk);
 	struct binder_priv *fmp = (struct binder_priv *)&tp->mpcb->mptcp_pm[0];
 
+	opt = kmalloc(MAX_IPOPTLEN, GFP_KERNEL);
 	/*
 	 * Read lock: multiple sockets can read LSRR addresses at the same time,
 	 * but writes are done in mutual exclusion.
 	 */
 	read_lock(&mptcp_gws_lock);
 	spin_lock(fmp->flow_lock);
-	
-	opt = kmalloc(MAX_IPOPTLEN, GFP_KERNEL);
 
 	i = mptcp_get_avail_list_ipv4(sk, (unsigned char *) opt);
 	printk("Free list: %i\n", i);
@@ -204,10 +203,9 @@ static void mptcp_v4_add_lsrr(struct sock *sk, struct in_addr rem)
 			"failed, error %d\n", __func__, ret);
 			goto error;
 		}
-
-		kfree(opt);
 	}
-	
+
+	kfree(opt);
 	spin_unlock(fmp->flow_lock);
 	read_unlock(&mptcp_gws_lock);
 	return;
