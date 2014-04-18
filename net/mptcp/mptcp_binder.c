@@ -15,6 +15,7 @@
 #include <net/route.h>
 #include <net/xfrm.h>
 #include <net/compat.h>
+#include <linux/slab.h>
 #if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
 #include <net/transp_v6.h>
 #include <linux/ipv6.h>
@@ -27,6 +28,7 @@
 #if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
 #define MPTCP_GATEWAY_LIST_MAX_LEN6	1
 #define MPTCP_GATEWAY6_SYSCTL_MAX_LEN	40 * MPTCP_GATEWAY_LIST_MAX_LEN6 * MPTCP_GATEWAY_MAX_LISTS
+#define MPTCP_OPT_V6_SIZE 24
 #endif  /* CONFIG_MPTCP_BINDER_IPV6 */
 
 struct mptcp_gw_list {
@@ -56,11 +58,15 @@ static rwlock_t mptcp_gws_lock;
 static int sysctl_mptcp_binder_ndiffports __read_mostly = 2;
 static char sysctl_mptcp_binder_gateways[MPTCP_GATEWAY_SYSCTL_MAX_LEN] __read_mostly;
 
+static struct kmem_cache *opt_slub_v4 = NULL;
+
 #if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
 static struct mptcp_gw_list6 * mptcp_gws6 = NULL;
 static rwlock_t mptcp_gws6_lock;
 
 static char sysctl_mptcp_binder_gateways6[MPTCP_GATEWAY6_SYSCTL_MAX_LEN] __read_mostly;
+
+static struct kmem_cache *opt_slub_v6 = NULL;
 #endif /* CONFIG_MPTCP_BINDER_IPV6 */
 
 static int mptcp_get_avail_list_ipv4(struct sock *sk, unsigned char *opt) {
@@ -165,7 +171,9 @@ static void mptcp_v4_add_lsrr(struct sock *sk, struct in_addr rem)
 	struct tcp_sock * tp = tcp_sk(sk);
 	struct binder_priv *fmp = (struct binder_priv *)&tp->mpcb->mptcp_pm[0];
 
-	opt = kmalloc(MAX_IPOPTLEN, GFP_KERNEL);
+	opt = kmem_cache_alloc(opt_slub_v4, GFP_KERNEL);
+	if (!opt)
+		goto error;
 	/*
 	 * Read lock: multiple sockets can read LSRR addresses at the same time,
 	 * but writes are done in mutual exclusion.
@@ -194,6 +202,10 @@ static void mptcp_v4_add_lsrr(struct sock *sk, struct in_addr rem)
 		memcpy(opt + 4 + (j * sizeof(rem.s_addr)), &rem.s_addr,
 				sizeof(rem.s_addr));
 
+		/*
+		 * setsockopt must be inside the lock, otherwise another subflow could
+		 * fail to see that we have taken a list.
+		 */
 		ret = ip_setsockopt(sk, IPPROTO_IP, IP_OPTIONS, opt,
 				4 + sizeof(mptcp_gws->list[i][0].s_addr)
 				* (mptcp_gws->len[i] + 1));
@@ -207,13 +219,13 @@ static void mptcp_v4_add_lsrr(struct sock *sk, struct in_addr rem)
 
 	spin_unlock(fmp->flow_lock);
 	read_unlock(&mptcp_gws_lock);
-	kfree(opt);
+	kmem_cache_free(opt_slub_v4, opt);
 	return;
 
 error:
 	spin_unlock(fmp->flow_lock);
 	read_unlock(&mptcp_gws_lock);
-	kfree(opt);
+	kmem_cache_free(opt_slub_v4, opt);
 	return;
 }
 
@@ -230,10 +242,10 @@ static int mptcp_parse_gateway_ipv4(char * gateways)
 	char * tmp_string = NULL;
 	struct in_addr tmp_addr;
 
-	write_lock(&mptcp_gws_lock);
-
 	if ((tmp_string = kzalloc(16, GFP_KERNEL)) == NULL)
 		goto error;
+
+	write_lock(&mptcp_gws_lock);
 
 	memset(mptcp_gws, 0, sizeof(struct mptcp_gw_list));
 
@@ -309,10 +321,9 @@ error:
 }
 
 #if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
-static int mptcp_get_avail_list_ipv6(struct sock *sk, unsigned char *opt,
-		int opt_len)
+static int mptcp_get_avail_list_ipv6(struct sock *sk, unsigned char *opt)
 {
-	int i, sock_num, list_free, opt_ret;
+	int i, sock_num, list_free, opt_ret, opt_len;
 	struct tcp_sock *tp;
 	struct ipv6_pinfo *np;
 
@@ -330,7 +341,7 @@ static int mptcp_get_avail_list_ipv6(struct sock *sk, unsigned char *opt,
 			sock_num++;
 
 			/* Reset length and options buffer, then retrieve from socket */
-			memset(opt, 0, opt_len);
+			memset(opt, 0, MPTCP_OPT_V6_SIZE);
 			opt_ret = ipv6_getsockopt((struct sock *)tp, IPPROTO_IPV6,
 					IPV6_RTHDR, opt, &opt_len);
 			if (opt_ret < 0) {
@@ -377,16 +388,14 @@ error:
  */
 static void mptcp_v6_add_rh0(struct sock * sk, struct sockaddr_in6 *rem)
 {
-	int i, ret, opt_len;
+	int i, ret;
 	char * opt = NULL;
 	struct tcp_sock * tp = tcp_sk(sk);
 	struct binder_priv *fmp = (struct binder_priv *)&tp->mpcb->mptcp_pm[0];
 
-	/*
-	 * Size of a routing header in bytes.
-	 */
-	opt_len = 24;
-	opt = kzalloc(opt_len, GFP_KERNEL);
+	opt = kmem_cache_alloc(opt_slub_v6, GFP_KERNEL);
+	if (!opt)
+		goto error;
 	/*
 	 * Read lock: multiple sockets can read LSRR addresses at the same time,
 	 * but writes are done in mutual exclusion.
@@ -394,13 +403,13 @@ static void mptcp_v6_add_rh0(struct sock * sk, struct sockaddr_in6 *rem)
 	read_lock(&mptcp_gws6_lock);
 	spin_lock(fmp->flow_lock);
 
-	i = mptcp_get_avail_list_ipv6(sk, (unsigned char *) opt, opt_len);
+	i = mptcp_get_avail_list_ipv6(sk, (unsigned char *) opt);
 
 	/*
 	 * Execution enters here only if a free path is found.
 	 */
 	if (i >= 0) {
-		memset(opt, 0, opt_len);
+		memset(opt, 0, MPTCP_OPT_V6_SIZE);
 		opt[1] = 2; // Hdr Ext Len, from rfc2460: 2x addresses in the header.
 		opt[2] = 0; // Routing Type
 		opt[3] = 1; // Segments Left
@@ -415,7 +424,12 @@ static void mptcp_v6_add_rh0(struct sock * sk, struct sockaddr_in6 *rem)
 		memcpy(&rem->sin6_addr, &mptcp_gws6->list[i][0].s6_addr,
 				sizeof(mptcp_gws6->list[i][0].s6_addr));
 
-		ret = ipv6_setsockopt(sk, IPPROTO_IPV6, IPV6_RTHDR, opt, opt_len);
+		/*
+		 * setsockopt must be inside the lock, otherwise another subflow could
+		 * fail to see that we have taken a list.
+		 */
+		ret = ipv6_setsockopt(sk, IPPROTO_IPV6, IPV6_RTHDR, opt,
+				MPTCP_OPT_V6_SIZE);
 
 		if (ret < 0) {
 			mptcp_debug(KERN_ERR "%s: MPTCP subsocket setsockopt() IPV6_RTHDR "
@@ -426,13 +440,13 @@ static void mptcp_v6_add_rh0(struct sock * sk, struct sockaddr_in6 *rem)
 
 	spin_unlock(fmp->flow_lock);
 	read_unlock(&mptcp_gws6_lock);
-	kfree(opt);
+	kmem_cache_free(opt_slub_v6, opt);
 	return;
 
 error:
 	spin_unlock(fmp->flow_lock);
 	read_unlock(&mptcp_gws6_lock);
-	kfree(opt);
+	kmem_cache_free(opt_slub_v6, opt);
 	return;
 }
 
@@ -449,10 +463,10 @@ static int mptcp_parse_gateway_ipv6(char * gateways)
 	char * tmp_string = NULL;
 	struct in6_addr tmp_addr;
 
-	write_lock(&mptcp_gws6_lock);
-
 	if ((tmp_string = kzalloc(40, GFP_KERNEL)) == NULL)
 		goto error;
+
+	write_lock(&mptcp_gws6_lock);
 
 	memset(mptcp_gws6, 0, sizeof(struct mptcp_gw_list6));
 
@@ -515,15 +529,15 @@ static int mptcp_parse_gateway_ipv6(char * gateways)
 
 	sysctl_mptcp_binder_ndiffports = k+1;
 
-	kfree(tmp_string);
 	write_unlock(&mptcp_gws6_lock);
+	kfree(tmp_string);
 	return 0;
 
 error:
-	kfree(tmp_string);
 	memset(mptcp_gws6, 0, sizeof(struct mptcp_gw_list6));
 	memset(gateways, 0, sizeof(char) * MPTCP_GATEWAY6_SYSCTL_MAX_LEN);
 	write_unlock(&mptcp_gws6_lock);
+	kfree(tmp_string);
 	return -1;
 }
 #endif /* CONFIG_MPTCP_BINDER_IPV6 */
@@ -735,15 +749,25 @@ static int __init binder_register(void)
 	mptcp_gws = kzalloc(sizeof(struct mptcp_gw_list), GFP_KERNEL);
 	if (!mptcp_gws)
 		return -ENOMEM;
-		
+
 	rwlock_init(&mptcp_gws_lock);
-	
+
+	opt_slub_v4 = kmem_cache_create("binder_v4", MAX_IPOPTLEN,
+            0, 0, NULL);
+	if (!opt_slub_v4)
+		return -ENOMEM;
+
 #if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
 	mptcp_gws6 = kzalloc(sizeof(struct mptcp_gw_list6), GFP_KERNEL);
 	if (!mptcp_gws6)
 		return -ENOMEM;
-		
+
 	rwlock_init(&mptcp_gws6_lock);
+
+	opt_slub_v6 = kmem_cache_create("binder_v6", MPTCP_OPT_V6_SIZE,
+            0, 0, NULL);
+	if (!opt_slub_v6)
+		return -ENOMEM;
 #endif /* CONFIG_MPTCP_BINDER_IPV6 */
 
 	BUILD_BUG_ON(sizeof(struct binder_priv) > MPTCP_PM_SIZE);
@@ -768,8 +792,12 @@ static void binder_unregister(void)
 	mptcp_unregister_path_manager(&binder);
 	unregister_net_sysctl_table(mptcp_sysctl_binder);
 	kfree(mptcp_gws);
+	if (opt_slub_v4)
+		kmem_cache_destroy(opt_slub_v4);
 #if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
 	kfree(mptcp_gws6);
+	if (opt_slub_v6)
+		kmem_cache_destroy(opt_slub_v6);
 #endif /* CONFIG_MPTCP_BINDER_IPV6 */
 }
 
