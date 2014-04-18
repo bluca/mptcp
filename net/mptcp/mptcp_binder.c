@@ -50,14 +50,14 @@ struct binder_priv {
 	spinlock_t *flow_lock;
 };
 
-static struct mptcp_gw_list * mptcp_gws;
+static struct mptcp_gw_list * mptcp_gws = NULL;
 static rwlock_t mptcp_gws_lock;
 
 static int sysctl_mptcp_binder_ndiffports __read_mostly = 2;
 static char sysctl_mptcp_binder_gateways[MPTCP_GATEWAY_SYSCTL_MAX_LEN] __read_mostly;
 
 #if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
-static struct mptcp_gw_list6 * mptcp_gws6;
+static struct mptcp_gw_list6 * mptcp_gws6 = NULL;
 static rwlock_t mptcp_gws6_lock;
 
 static char sysctl_mptcp_binder_gateways6[MPTCP_GATEWAY6_SYSCTL_MAX_LEN] __read_mostly;
@@ -147,11 +147,9 @@ static int mptcp_get_avail_list_ipv4(struct sock *sk, unsigned char *opt) {
 	
 	if (i >= MPTCP_GATEWAY_MAX_LISTS)
 		goto error;
-	
-	memset(opt, 0, MAX_IPOPTLEN);
+
 	return i;
 error:
-	memset(opt, 0, MAX_IPOPTLEN);
 	return -1;
 }
 
@@ -182,6 +180,7 @@ static void mptcp_v4_add_lsrr(struct sock *sk, struct in_addr rem)
 	 * Execution enters here only if a free path is found.
 	 */
 	if (i >= 0) {
+		memset(opt, 0, MAX_IPOPTLEN);
 		opt[0] = IPOPT_NOP;
 		opt[1] = IPOPT_LSRR;
 		opt[2] = sizeof(mptcp_gws->list[i][0].s_addr) * (mptcp_gws->len[i] + 1)
@@ -206,9 +205,9 @@ static void mptcp_v4_add_lsrr(struct sock *sk, struct in_addr rem)
 		}
 	}
 
-	kfree(opt);
 	spin_unlock(fmp->flow_lock);
 	read_unlock(&mptcp_gws_lock);
+	kfree(opt);
 	return;
 
 error:
