@@ -177,6 +177,8 @@ static void mptcp_v4_add_lsrr(struct sock *sk, struct in_addr rem)
 	/*
 	 * Read lock: multiple sockets can read LSRR addresses at the same time,
 	 * but writes are done in mutual exclusion.
+	 * Spin lock: must search for free list for one socket at a time, or
+	 * multiple sockets could take the same list.
 	 */
 	read_lock(&mptcp_gws_lock);
 	spin_lock(fmp->flow_lock);
@@ -302,16 +304,16 @@ static int mptcp_parse_gateway_ipv4(char * gateways)
 
 	sysctl_mptcp_binder_ndiffports = k+1;
 
-	kfree(tmp_string);
 	write_unlock(&mptcp_gws_lock);
+	kfree(tmp_string);
 
 	return 0;
 
 error:
-	kfree(tmp_string);
 	memset(mptcp_gws, 0, sizeof(struct mptcp_gw_list));
 	memset(gateways, 0, sizeof(char) * MPTCP_GATEWAY_SYSCTL_MAX_LEN);
 	write_unlock(&mptcp_gws_lock);
+	kfree(tmp_string);
 	return -1;
 }
 
@@ -392,8 +394,10 @@ static void mptcp_v6_add_rh0(struct sock * sk, struct sockaddr_in6 *rem)
 	if (!opt)
 		goto error;
 	/*
-	 * Read lock: multiple sockets can read LSRR addresses at the same time,
+	 * Read lock: multiple sockets can read RTH addresses at the same time,
 	 * but writes are done in mutual exclusion.
+	 * Spin lock: must search for free list for one socket at a time, or
+	 * multiple sockets could take the same list.
 	 */
 	read_lock(&mptcp_gws6_lock);
 	spin_lock(fmp->flow_lock);
