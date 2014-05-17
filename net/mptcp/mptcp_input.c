@@ -255,8 +255,9 @@ static int mptcp_rcv_state_process(struct sock *meta_sk, struct sock *sk,
 			    after(TCP_SKB_CB(skb)->end_seq - th->fin, tp->rcv_nxt) &&
 			    !mptcp_is_data_fin2(skb, tp)) {
 				NET_INC_STATS_BH(sock_net(meta_sk), LINUX_MIB_TCPABORTONDATA);
-
 				mptcp_send_active_reset(meta_sk, GFP_ATOMIC);
+				tcp_reset(meta_sk);
+				return 1;
 			}
 		}
 		break;
@@ -457,7 +458,7 @@ static void mptcp_skb_trim_head(struct sk_buff *skb, struct sock *sk, u32 seq)
 	else
 		__pskb_trim_head(skb, len - skb_headlen(skb));
 
-	TCP_SKB_CB(skb)->seq = htonl(new_seq);
+	TCP_SKB_CB(skb)->seq = new_seq;
 
 	skb->truesize -= len;
 	atomic_sub(len, &sk->sk_rmem_alloc);
@@ -1490,8 +1491,9 @@ static void mptcp_data_ack(struct sock *sk, const struct sk_buff *skb)
 			meta_sk->sk_write_space(meta_sk);
 	}
 
-	if (meta_sk->sk_state != TCP_ESTABLISHED)
-		mptcp_rcv_state_process(meta_sk, sk, skb, data_seq, data_len);
+	if (meta_sk->sk_state != TCP_ESTABLISHED &&
+	    mptcp_rcv_state_process(meta_sk, sk, skb, data_seq, data_len))
+		return;
 
 exit:
 	mptcp_push_pending_frames(meta_sk);
@@ -1622,21 +1624,28 @@ void mptcp_parse_options(const uint8_t *ptr, int opsize,
 			break;
 		}
 
+		/* saw_mpc must be set, because in tcp_check_req we assume that
+		 * it is set to support falling back to reg. TCP if a rexmitted
+		 * SYN has no MP_CAPABLE or MP_JOIN
+		 */
 		switch (opsize) {
 		case MPTCP_SUB_LEN_JOIN_SYN:
 			mopt->is_mp_join = 1;
+			mopt->saw_mpc = 1;
 			mopt->low_prio = mpjoin->b;
 			mopt->rem_id = mpjoin->addr_id;
 			mopt->mptcp_rem_token = mpjoin->u.syn.token;
 			mopt->mptcp_recv_nonce = mpjoin->u.syn.nonce;
 			break;
 		case MPTCP_SUB_LEN_JOIN_SYNACK:
+			mopt->saw_mpc = 1;
 			mopt->low_prio = mpjoin->b;
 			mopt->rem_id = mpjoin->addr_id;
 			mopt->mptcp_recv_tmac = mpjoin->u.synack.mac;
 			mopt->mptcp_recv_nonce = mpjoin->u.synack.nonce;
 			break;
 		case MPTCP_SUB_LEN_JOIN_ACK:
+			mopt->saw_mpc = 1;
 			mopt->join_ack = 1;
 			memcpy(mopt->mptcp_recv_mac, mpjoin->u.ack.mac, 20);
 			break;

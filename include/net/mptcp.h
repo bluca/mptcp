@@ -223,7 +223,7 @@ struct mptcp_pm_ops {
 	struct list_head list;
 
 	/* Signal the creation of a new MPTCP-session. */
-	void (*new_session)(struct sock *meta_sk, u8 id);
+	void (*new_session)(struct sock *meta_sk, int id);
 	void (*release_sock)(struct sock *meta_sk);
 	void (*fully_established)(struct sock *meta_sk);
 	void (*new_remote_address)(struct sock *meta_sk);
@@ -800,6 +800,7 @@ int mptcp_register_path_manager(struct mptcp_pm_ops *pm);
 void mptcp_unregister_path_manager(struct mptcp_pm_ops *pm);
 void mptcp_init_path_manager(struct mptcp_cb *mpcb);
 void mptcp_cleanup_path_manager(struct mptcp_cb *mpcb);
+void mptcp_fallback_default(struct mptcp_cb *mpcb);
 void mptcp_get_default_path_manager(char *name);
 int mptcp_set_default_path_manager(const char *name);
 extern struct mptcp_pm_ops mptcp_pm_default;
@@ -1186,11 +1187,17 @@ static inline int __mptcp_find_free_index(u8 bitfield, int j, u8 base)
 		/* We wrapped at the bitfield - try from 0 on */
 		if (i + base >= sizeof(bitfield) * 8) {
 			mptcp_for_each_bit_unset(bitfield, i) {
+				if (i >= sizeof(bitfield) * 8)
+					goto exit;
+
 				if (i != j)
 					return i;
 			}
 			goto exit;
 		}
+		if (i + base >= sizeof(bitfield) * 8)
+			break;
+
 		if (i + base != j)
 			return i + base;
 	}
@@ -1221,6 +1228,8 @@ static inline u8 mptcp_set_new_pathindex(struct mptcp_cb *mpcb)
 		return i;
 	}
 	mptcp_for_each_bit_unset(mpcb->path_index_bits, i) {
+		if (i >= sizeof(mpcb->path_index_bits) * 8)
+			break;
 		if (i < 1)
 			continue;
 		mpcb->path_index_bits |= (1 << i);
