@@ -601,7 +601,7 @@ exit:
 	sock_put(meta_sk);
 }
 
-static void binder_new_session(struct sock *meta_sk, u8 id)
+static void binder_new_session(struct sock *meta_sk, int id)
 {
 	struct mptcp_cb *mpcb = tcp_sk(meta_sk)->mpcb;
 	struct binder_priv *fmp = (struct binder_priv *)&mpcb->mptcp_pm[0];
