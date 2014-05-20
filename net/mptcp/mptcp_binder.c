@@ -150,8 +150,10 @@ static int mptcp_get_avail_list_ipv4(struct sock *sk, unsigned char *opt) {
 		}
 		
 		/* Free list found if not taken by a socket */
-		if (! list_taken)
+		if (! list_taken) {
+			mptcp_debug("mptcp_get_avail_list_ipv4: List free\n");
 			break;
+		}
 	}
 	
 	if (i >= MPTCP_GATEWAY_MAX_LISTS)
@@ -187,7 +189,6 @@ static void mptcp_v4_add_lsrr(struct sock *sk, struct in_addr rem)
 	spin_lock(fmp->flow_lock);
 
 	i = mptcp_get_avail_list_ipv4(sk, (unsigned char *) opt);
-	mptcp_debug("mptcp_v4_add_lsrr: Using list %i\n", i);
 
 	/*
 	 * Execution enters here only if a free path is found.
@@ -325,7 +326,6 @@ static int mptcp_get_avail_list_ipv6(struct sock *sk, unsigned char *opt)
 {
 	int i, sock_num, list_free, opt_ret, opt_len;
 	struct tcp_sock *tp;
-	struct ipv6_pinfo *np;
 
 	for (i = 0; i < MPTCP_GATEWAY_MAX_LISTS; ++i) {
 		if (mptcp_gws->len[i] == 0)
@@ -355,8 +355,8 @@ static int mptcp_get_avail_list_ipv6(struct sock *sk, unsigned char *opt)
 			 * The hop address will be in the socket dest address, NOT
 			 * in the routing header.
 			 */
-			np = inet6_sk((struct sock *)tp);
-			if (opt_len == 0 || memcmp(&mptcp_gws->list[i][0], &np->daddr, 8)) {
+			if (opt_len == 0 ||
+					memcmp(&mptcp_gws->list[i][0], &sk->sk_v6_daddr, 8)) {
 				list_free++;
 			} else {
 				/*
