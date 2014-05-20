@@ -78,13 +78,14 @@ static int mptcp_get_avail_list_ipv4(struct sock *sk, unsigned char *opt) {
 		if (mptcp_gws->len[i] == 0)
 			goto error;
 			
+		mptcp_debug("mptcp_get_avail_list_ipv4: List %i\n", i);
 		sock_num = 0;
 		list_free = 0;
 		
 		/* Loop through all sub-sockets in this connection */
 		tp = tcp_sk(sk)->mpcb->connection_list->mptcp->next;
 		while (tp != NULL) {
-			printk("Sock\n");
+			mptcp_debug("mptcp_get_avail_list_ipv4: Next socket\n");
 			sock_num++;
 			
 			/* Reset length and options buffer, then retrieve from socket */
@@ -104,10 +105,9 @@ static int mptcp_get_avail_list_ipv4(struct sock *sk, unsigned char *opt) {
 			} else {
 				/* Iterate options buffer */
 				for (opt_ptr = &opt[0]; opt_ptr < &opt[opt_len]; opt_ptr++) {
-					printk("%u\n", *opt_ptr);
-					
+										
 					if (*opt_ptr == IPOPT_LSRR) {
-						printk("LSRR\n");
+						mptcp_debug("mptcp_get_avail_list_ipv4: LSRR options found\n");
 						
 						/* Pointer to the 2nd to last address */
 						opt_end_ptr = opt_ptr+(*(opt_ptr+1))-4;
@@ -118,18 +118,19 @@ static int mptcp_get_avail_list_ipv4(struct sock *sk, unsigned char *opt) {
 						
 						/* Different length lists cannot be the same */
 						if ((opt_end_ptr-opt_ptr)/4 != mptcp_gws->len[i]) {
-							printk("Diff length\n");
+							mptcp_debug("mptcp_get_avail_list_ipv4: Lists "
+								"differ (length)\n");
 							list_free++;
 						}
 						else {							
 							/* Iterate if we are still inside options list and 
 							 * sysctl list */
 							while(opt_ptr < opt_end_ptr && j < mptcp_gws->len[i]) {
-								printk("%pI4\n", opt_ptr);
-								
 								/* If there is a different address, this list must 
 								 * not be set on this socket */
 								if (memcmp(&mptcp_gws->list[i][j], opt_ptr, 4)) {
+									mptcp_debug("mptcp_get_avail_list_ipv4: Lists "
+										"differ (gateway)\n");
 									list_free++;
 								}
 								
@@ -184,7 +185,7 @@ static void mptcp_v4_add_lsrr(struct sock *sk, struct in_addr rem)
 	spin_lock(fmp->flow_lock);
 
 	i = mptcp_get_avail_list_ipv4(sk, (unsigned char *) opt);
-	printk("Free list: %i\n", i);
+	mptcp_debug("mptcp_v4_add_lsrr: Using list %i\n", i);
 
 	/*
 	 * Execution enters here only if a free path is found.
@@ -328,13 +329,14 @@ static int mptcp_get_avail_list_ipv6(struct sock *sk, unsigned char *opt)
 		if (mptcp_gws->len[i] == 0)
 			goto error;
 
+		mptcp_debug("mptcp_get_avail_list_ipv6: List %i\n", i);
 		sock_num = 0;
 		list_free = 0;
 
 		/* Loop through all sub-sockets in this connection */
 		tp = tcp_sk(sk)->mpcb->connection_list->mptcp->next;
 		while (tp != NULL) {
-			printk("Sock\n");
+			mptcp_debug("mptcp_get_avail_list_ipv6: Next socket\n");
 			sock_num++;
 
 			/* Reset length and options buffer, then retrieve from socket */
