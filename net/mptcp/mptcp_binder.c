@@ -70,7 +70,7 @@ static struct kmem_cache *opt_slub_v6 = NULL;
 #endif /* CONFIG_MPTCP_BINDER_IPV6 */
 
 static int mptcp_get_avail_list_ipv4(struct sock *sk, unsigned char *opt) {
-	int i, j, sock_num, list_free, opt_ret, opt_len;
+	int i, j, sock_num, list_taken, opt_ret, opt_len;
 	struct tcp_sock *tp;
 	unsigned char *opt_ptr, *opt_end_ptr;
 	
@@ -80,7 +80,7 @@ static int mptcp_get_avail_list_ipv4(struct sock *sk, unsigned char *opt) {
 			
 		mptcp_debug("mptcp_get_avail_list_ipv4: List %i\n", i);
 		sock_num = 0;
-		list_free = 0;
+		list_taken = 0;
 		
 		/* Loop through all sub-sockets in this connection */
 		tp = tcp_sk(sk)->mpcb->connection_list->mptcp->next;
@@ -100,9 +100,7 @@ static int mptcp_get_avail_list_ipv4(struct sock *sk, unsigned char *opt) {
 			}
 
 			/* If socket has no options, it has no stake in this list */
-			if (opt_len == 0) {
-				list_free++;
-			} else {
+			if (opt_len > 0) {
 				/* Iterate options buffer */
 				for (opt_ptr = &opt[0]; opt_ptr < &opt[opt_len]; opt_ptr++) {
 										
@@ -117,26 +115,26 @@ static int mptcp_get_avail_list_ipv4(struct sock *sk, unsigned char *opt) {
 						j = 0;
 						
 						/* Different length lists cannot be the same */
-						if ((opt_end_ptr-opt_ptr)/4 != mptcp_gws->len[i]) {
-							mptcp_debug("mptcp_get_avail_list_ipv4: Lists "
-								"differ (length)\n");
-							list_free++;
-						}
-						else {							
+						if ((opt_end_ptr-opt_ptr)/4 == mptcp_gws->len[i]) {
 							/* Iterate if we are still inside options list and 
 							 * sysctl list */
 							while(opt_ptr < opt_end_ptr && j < mptcp_gws->len[i]) {
 								/* If there is a different address, this list must 
 								 * not be set on this socket */
-								if (memcmp(&mptcp_gws->list[i][j], opt_ptr, 4)) {
-									mptcp_debug("mptcp_get_avail_list_ipv4: Lists "
-										"differ (gateway)\n");
-									list_free++;
-								}
+								if (memcmp(&mptcp_gws->list[i][j], opt_ptr, 4))
+									break;
 								
 								/* Jump 4 bytes to next address */
 								opt_ptr += 4;
 								j++;
+							}
+							
+							/* Reached the end without a differing address,
+							 * lists are therefore identical */
+							if (j == mptcp_gws->len[i]) {
+								mptcp_debug("mptcp_get_avail_list_ipv4: List "
+										"already used\n");
+								list_taken = 1;
 							}
 						}
 						break;
@@ -144,11 +142,15 @@ static int mptcp_get_avail_list_ipv4(struct sock *sk, unsigned char *opt) {
 				}
 			}
 			
+			/* List is taken so move on */
+			if (list_taken)
+				break;
+				
 			tp = tp->mptcp->next;
 		}
 		
-		/* Free list found if all sockets agree */
-		if (sock_num == list_free)
+		/* Free list found if not taken by a socket */
+		if (! list_taken)
 			break;
 	}
 	
