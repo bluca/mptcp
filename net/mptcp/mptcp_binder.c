@@ -28,7 +28,7 @@
 										MPTCP_GW_MAX_LISTS)
 #if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
 #define MPTCP_GW_LIST_MAX_LEN6	1
-#define MPTCP_GW6_SYSCTL_MAX_LEN	(40 * MPTCP_GW_LIST_MAX_LEN6 * \
+#define MPTCP_GW6_SYSCTL_MAX_LEN	(40 * MPTCP_GW_LIST_MAX_LEN6 *	\
 										MPTCP_GW_MAX_LISTS)
 #define MPTCP_OPT_V6_SIZE 24
 #endif  /* CONFIG_MPTCP_BINDER_IPV6 */
@@ -54,21 +54,21 @@ struct binder_priv {
 	spinlock_t *flow_lock;
 };
 
-static struct mptcp_gw_list * mptcp_gws = NULL;
+static struct mptcp_gw_list *mptcp_gws;
 static rwlock_t mptcp_gws_lock;
 
 static int sysctl_mptcp_binder_ndiffports __read_mostly = 2;
 static char sysctl_mptcp_binder_gateways[MPTCP_GW_SYSCTL_MAX_LEN] __read_mostly;
 
-static struct kmem_cache *opt_slub_v4 = NULL;
+static struct kmem_cache *opt_slub_v4;
 
 #if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
-static struct mptcp_gw_list6 * mptcp_gws6 = NULL;
+static struct mptcp_gw_list6 *mptcp_gws6;
 static rwlock_t mptcp_gws6_lock;
 
 static char sysctl_mptcp_binder_gateways6[MPTCP_GW6_SYSCTL_MAX_LEN] __read_mostly;
 
-static struct kmem_cache *opt_slub_v6 = NULL;
+static struct kmem_cache *opt_slub_v6;
 #endif /* CONFIG_MPTCP_BINDER_IPV6 */
 
 static int mptcp_get_avail_list_ipv4(struct sock *sk, unsigned char *opt) {
