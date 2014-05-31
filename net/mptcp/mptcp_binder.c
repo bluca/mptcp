@@ -24,12 +24,12 @@
 /* fprint of the list, to look it up set it available on socket close */
 #define MPTCP_GW_MAX_LISTS	10
 #define MPTCP_GW_LIST_MAX_LEN	6
-#define MPTCP_GW_SYSCTL_MAX_LEN	(15 * MPTCP_GW_LIST_MAX_LEN * 	\
-										MPTCP_GW_MAX_LISTS)
+#define MPTCP_GW_SYSCTL_MAX_LEN	(15 * MPTCP_GW_LIST_MAX_LEN *	\
+							MPTCP_GW_MAX_LISTS)
 #if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
 #define MPTCP_GW_LIST_MAX_LEN6	1
 #define MPTCP_GW6_SYSCTL_MAX_LEN	(40 * MPTCP_GW_LIST_MAX_LEN6 *	\
-										MPTCP_GW_MAX_LISTS)
+							MPTCP_GW_MAX_LISTS)
 #define MPTCP_OPT_V6_SIZE 24
 #endif  /* CONFIG_MPTCP_BINDER_IPV6 */
 
@@ -97,8 +97,8 @@ static int mptcp_get_avail_list_ipv4(struct sock *sk, unsigned char *opt)
 			opt_ret = ip_getsockopt((struct sock *)tp, IPPROTO_IP,
 				IP_OPTIONS, opt, &opt_len);
 			if (opt_ret < 0) {
-				mptcp_debug(KERN_ERR "%s: MPTCP subsocket getsockopt() IP_OPTIONS "
-				"failed, error %d\n", __func__, opt_ret);
+				mptcp_debug(KERN_ERR "%s: MPTCP subsocket getsockopt() "
+						"IP_OPTIONS failed, error %d\n", __func__, opt_ret);
 				goto error;
 			}
 
@@ -203,8 +203,8 @@ static void mptcp_v4_add_lsrr(struct sock *sk, struct in_addr rem)
 		memset(opt, 0, MAX_IPOPTLEN);
 		opt[0] = IPOPT_NOP;
 		opt[1] = IPOPT_LSRR;
-		opt[2] = sizeof(mptcp_gws->list[i][0].s_addr) * (mptcp_gws->len[i] + 1)
-				+ 3;
+		opt[2] = sizeof(mptcp_gws->list[i][0].s_addr) *
+				(mptcp_gws->len[i] + 1) + 3;
 		opt[3] = IPOPT_MINOFF;
 		for (j = 0; j < mptcp_gws->len[i]; ++j)
 			memcpy(opt + 4 + (j * sizeof(mptcp_gws->list[i][0].s_addr)),
@@ -241,26 +241,28 @@ error:
  * themselves must be separated by "-". Returns -1 in case one or more of the
  * addresses is not a valid ipv4/6 address.
  */
-static int mptcp_parse_gateway_ipv4(char * gateways)
+static int mptcp_parse_gateway_ipv4(char *gateways)
 {
 	int i, j, k, ret;
-	char * tmp_string = NULL;
+	char *tmp_string = NULL;
 	struct in_addr tmp_addr;
 
-	if ((tmp_string = kzalloc(16, GFP_KERNEL)) == NULL)
+	tmp_string = kzalloc(16, GFP_KERNEL);
+	if (tmp_string) == NULL)
 		return -ENOMEM;
 
 	write_lock(&mptcp_gws_lock);
 
 	memset(mptcp_gws, 0, sizeof(struct mptcp_gw_list));
 
-	/* A TMP string is used since inet_pton needs a null terminated string but
-	 * we do not want to modify the sysctl for obvious reasons.
+	/* A TMP string is used since inet_pton needs a null terminated string
+	 * but we do not want to modify the sysctl for obvious reasons.
 	 * i will iterate over the SYSCTL string, j will iterate over the
-	 * temporary string where each IP is copied into, k will iterate over the
-	 * IPs in each list.
+	 * temporary string where each IP is copied into, k will iterate over
+	 * the IPs in each list.
 	 */
-	for (i = j = k = 0; i < MPTCP_GW_SYSCTL_MAX_LEN && k < MPTCP_GW_MAX_LISTS; ++i) {
+	for (i = j = k = 0; i < MPTCP_GW_SYSCTL_MAX_LEN && k < MPTCP_GW_MAX_LISTS;
+			++i) {
 		if (gateways[i] == '-' || gateways[i] == ',' || gateways[i] == '\0') {
 			/* If the temp IP is empty and the current list is empty, we are
 			 * done.
@@ -268,20 +270,20 @@ static int mptcp_parse_gateway_ipv4(char * gateways)
 			if (j == 0 && mptcp_gws->len[k] == 0)
 				break;
 
-			/* Terminate the temp IP string, then if it is non-empty parse the
-			 * IP and copy it.
+			/* Terminate the temp IP string, then if it is non-empty parse
+			 * the IP and copy it.
 			 */
 			tmp_string[j] = '\0';
 			if (j > 0) {
-				mptcp_debug("mptcp_parse_gateway_list tmp: %s i: %d \n",
+				mptcp_debug("mptcp_parse_gateway_list tmp: %s i: %d\n",
 						tmp_string, i);
 
 				ret = in4_pton(tmp_string, strlen(tmp_string),
 						(u8 *) &tmp_addr.s_addr, '\0', NULL);
 
 				if (ret) {
-					mptcp_debug("mptcp_parse_gateway_list ret: %d s_addr: %pI4\n",
-							ret, &tmp_addr.s_addr);
+					mptcp_debug("mptcp_parse_gateway_list ret: %d s_addr: "
+								"%pI4\n", ret, &tmp_addr.s_addr);
 					memcpy(&mptcp_gws->list[k][mptcp_gws->len[k]].s_addr,
 							&tmp_addr.s_addr, sizeof(tmp_addr.s_addr));
 					mptcp_gws->len[k]++;
@@ -292,8 +294,9 @@ static int mptcp_parse_gateway_ipv4(char * gateways)
 					 * SYSCTL string.
 					 */
 					if (mptcp_gws->len[k] > MPTCP_GW_LIST_MAX_LEN) {
-						mptcp_debug("mptcp_parse_gateway_list too many members in list %i: max %i\n",
-							k, MPTCP_GW_LIST_MAX_LEN);
+						mptcp_debug("mptcp_parse_gateway_list too many "
+								"members in list %i: max %i\n", k,
+								MPTCP_GW_LIST_MAX_LEN);
 						goto error;
 					}
 				} else {
@@ -389,11 +392,11 @@ error:
  * to make sure it's up to date. In case of error, all the lists are
  * marked as unavailable.
  */
-static void mptcp_v6_add_rh0(struct sock * sk, struct sockaddr_in6 *rem)
+static void mptcp_v6_add_rh0(struct sock *sk, struct sockaddr_in6 *rem)
 {
 	int i, ret;
-	char * opt = NULL;
-	struct tcp_sock * tp = tcp_sk(sk);
+	char *opt = NULL;
+	struct tcp_sock *tp = tcp_sk(sk);
 	struct binder_priv *fmp = (struct binder_priv *)&tp->mpcb->mptcp_pm[0];
 
 	opt = kmem_cache_alloc(opt_slub_v6, GFP_KERNEL);
@@ -413,9 +416,9 @@ static void mptcp_v6_add_rh0(struct sock * sk, struct sockaddr_in6 *rem)
 	 */
 	if (i >= 0) {
 		memset(opt, 0, MPTCP_OPT_V6_SIZE);
-		opt[1] = 2; // Hdr Ext Len, from rfc2460: 2x addresses in the header.
-		opt[2] = 0; // Routing Type
-		opt[3] = 1; // Segments Left
+		opt[1] = 2; /* Hdr Ext Len, from rfc2460: 2x addresses in header. */
+		opt[2] = 0; /* Routing Type */
+		opt[3] = 1; /* Segments Left */
 
 		/* Insert dest address after 4 zero set bytes, following rfc2460
 		 */
@@ -450,13 +453,14 @@ error:
  * themselves must be separated by "-". Returns -1 in case one or more of the
  * addresses is not a valid ipv6 address.
  */
-static int mptcp_parse_gateway_ipv6(char * gateways)
+static int mptcp_parse_gateway_ipv6(char *gateways)
 {
 	int i, j, k, ret;
-	char * tmp_string = NULL;
+	char *tmp_string = NULL;
 	struct in6_addr tmp_addr;
 
-	if ((tmp_string = kzalloc(40, GFP_KERNEL)) == NULL)
+	tmp_string = kzalloc(40, GFP_KERNEL);
+	if (tmp_string == NULL)
 		return -ENOMEM;
 
 	write_lock(&mptcp_gws6_lock);
@@ -483,7 +487,7 @@ static int mptcp_parse_gateway_ipv6(char * gateways)
 			tmp_string[j] = '\0';
 
 			if (j > 0) {
-				mptcp_debug("mptcp_parse_gateway_list tmp: %s i: %d \n",
+				mptcp_debug("mptcp_parse_gateway_list tmp: %s i: %d\n",
 						tmp_string, i);
 
 				ret = in6_pton(tmp_string, strlen(tmp_string),
@@ -610,7 +614,7 @@ static void binder_new_session(struct sock *meta_sk, int index)
 	/* Initialize workqueue-struct */
 	INIT_WORK(&fmp->subflow_work, create_subflow_worker);
 	fmp->mpcb = mpcb;
-	
+
 	fmp->flow_lock = &flow_lock;
 }
 
@@ -648,8 +652,8 @@ static int proc_mptcp_gateways(ctl_table *ctl, int write,
 	};
 
 	if (write) {
-		if ((tbl.data = kzalloc(MPTCP_GW_SYSCTL_MAX_LEN, GFP_KERNEL))
-				== NULL)
+		tbl.data = kzalloc(MPTCP_GW_SYSCTL_MAX_LEN, GFP_KERNEL);
+		if (tbl.data == NULL)
 			return -1;
 		ret = proc_dostring(&tbl, write, buffer, lenp, ppos);
 		if (ret == 0) {
@@ -676,8 +680,8 @@ static int proc_mptcp_gateways6(ctl_table *ctl, int write,
 	};
 
 	if (write) {
-		if ((tbl.data = kzalloc(MPTCP_GW6_SYSCTL_MAX_LEN, GFP_KERNEL))
-				== NULL)
+		tbl.data = kzalloc(MPTCP_GW6_SYSCTL_MAX_LEN, GFP_KERNEL);
+		if (tbl.data == NULL)
 			return -1;
 		ret = proc_dostring(&tbl, write, buffer, lenp, ppos);
 		if (ret == 0) {
@@ -719,9 +723,9 @@ static struct ctl_table binder_table[] = {
 		.procname = "mptcp_binder_gateways",
 		.data = &sysctl_mptcp_binder_gateways,
 		.maxlen = sizeof(char) * MPTCP_GW_SYSCTL_MAX_LEN,
- 		.mode = 0644,
+		.mode = 0644,
 		.proc_handler = &proc_mptcp_gateways
- 	},
+	},
 #if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
 	{
 		.procname = "mptcp_binder_gateways6",
@@ -746,7 +750,7 @@ static int __init binder_register(void)
 	rwlock_init(&mptcp_gws_lock);
 
 	opt_slub_v4 = kmem_cache_create("binder_v4", MAX_IPOPTLEN,
-            0, 0, NULL);
+			0, 0, NULL);
 	if (!opt_slub_v4)
 		return -ENOMEM;
 
@@ -758,14 +762,15 @@ static int __init binder_register(void)
 	rwlock_init(&mptcp_gws6_lock);
 
 	opt_slub_v6 = kmem_cache_create("binder_v6", MPTCP_OPT_V6_SIZE,
-            0, 0, NULL);
+			0, 0, NULL);
 	if (!opt_slub_v6)
 		return -ENOMEM;
 #endif /* CONFIG_MPTCP_BINDER_IPV6 */
 
 	BUILD_BUG_ON(sizeof(struct binder_priv) > MPTCP_PM_SIZE);
 
-	mptcp_sysctl_binder = register_net_sysctl(&init_net, "net/mptcp", binder_table);
+	mptcp_sysctl_binder = register_net_sysctl(&init_net, "net/mptcp",
+			binder_table);
 	if (!mptcp_sysctl_binder)
 		goto exit;
 
