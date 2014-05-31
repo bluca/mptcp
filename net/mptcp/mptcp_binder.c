@@ -248,7 +248,7 @@ static int mptcp_parse_gateway_ipv4(char *gateways)
 	struct in_addr tmp_addr;
 
 	tmp_string = kzalloc(16, GFP_KERNEL);
-	if (tmp_string) == NULL)
+	if (tmp_string == NULL)
 		return -ENOMEM;
 
 	write_lock(&mptcp_gws_lock);
