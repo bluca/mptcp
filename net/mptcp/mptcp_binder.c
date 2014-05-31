@@ -123,7 +123,7 @@ static int mptcp_get_avail_list_ipv4(struct sock *sk, unsigned char *opt)
 							/* Iterate if we are still inside options list
 							 * and sysctl list
 							 */
-							while(opt_ptr < opt_end_ptr &&
+							while (opt_ptr < opt_end_ptr &&
 									j < mptcp_gws->len[i]) {
 								/* If there is a different address, this list
 								 * must not be set on this socket
@@ -159,7 +159,7 @@ static int mptcp_get_avail_list_ipv4(struct sock *sk, unsigned char *opt)
 		}
 
 		/* Free list found if not taken by a socket */
-		if (! list_taken) {
+		if (!list_taken) {
 			mptcp_debug("mptcp_get_avail_list_ipv4: List free\n");
 			break;
 		}
@@ -174,15 +174,15 @@ error:
 }
 
 /*
- * The list of addresses is parsed each time a new connection is opened, to
+ * The list of addresses is parsed each time a new connection is opened,
  *  to make sure it's up to date. In case of error, all the lists are
  *  marked as unavailable and the subflow's fingerprint is set to 0.
  */
 static void mptcp_v4_add_lsrr(struct sock *sk, struct in_addr rem)
 {
 	int i, j, ret;
-	char * opt = NULL;
-	struct tcp_sock * tp = tcp_sk(sk);
+	char *opt = NULL;
+	struct tcp_sock *tp = tcp_sk(sk);
 	struct binder_priv *fmp = (struct binder_priv *)&tp->mpcb->mptcp_pm[0];
 
 	opt = kmem_cache_alloc(opt_slub_v4, GFP_KERNEL);
