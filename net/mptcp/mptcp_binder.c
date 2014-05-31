@@ -173,8 +173,7 @@ error:
 	return -1;
 }
 
-/*
- * The list of addresses is parsed each time a new connection is opened,
+/* The list of addresses is parsed each time a new connection is opened,
  *  to make sure it's up to date. In case of error, all the lists are
  *  marked as unavailable and the subflow's fingerprint is set to 0.
  */
@@ -188,8 +187,7 @@ static void mptcp_v4_add_lsrr(struct sock *sk, struct in_addr rem)
 	opt = kmem_cache_alloc(opt_slub_v4, GFP_KERNEL);
 	if (!opt)
 		goto error;
-	/*
-	 * Read lock: multiple sockets can read LSRR addresses at the same time,
+	/* Read lock: multiple sockets can read LSRR addresses at the same time,
 	 * but writes are done in mutual exclusion.
 	 * Spin lock: must search for free list for one socket at a time, or
 	 * multiple sockets could take the same list.
@@ -199,8 +197,7 @@ static void mptcp_v4_add_lsrr(struct sock *sk, struct in_addr rem)
 
 	i = mptcp_get_avail_list_ipv4(sk, (unsigned char *) opt);
 
-	/*
-	 * Execution enters here only if a free path is found.
+	/* Execution enters here only if a free path is found.
 	 */
 	if (i >= 0) {
 		memset(opt, 0, MAX_IPOPTLEN);
@@ -217,8 +214,7 @@ static void mptcp_v4_add_lsrr(struct sock *sk, struct in_addr rem)
 		memcpy(opt + 4 + (j * sizeof(rem.s_addr)), &rem.s_addr,
 				sizeof(rem.s_addr));
 
-		/*
-		 * setsockopt must be inside the lock, otherwise another subflow could
+		/* setsockopt must be inside the lock, otherwise another subflow could
 		 * fail to see that we have taken a list.
 		 */
 		ret = ip_setsockopt(sk, IPPROTO_IP, IP_OPTIONS, opt,
@@ -239,12 +235,11 @@ error:
 	return;
 }
 
-/*
- *  Parses gateways string for a list of paths to different
- *  gateways, and stores them for use with the Loose Source Routing (LSRR)
- *  socket option. Each list must have "," separated addresses, and the lists
- *  themselves must be separated by "-". Returns -1 in case one or more of the
- *  addresses is not a valid ipv4/6 address.
+/* Parses gateways string for a list of paths to different
+ * gateways, and stores them for use with the Loose Source Routing (LSRR)
+ * socket option. Each list must have "," separated addresses, and the lists
+ * themselves must be separated by "-". Returns -1 in case one or more of the
+ * addresses is not a valid ipv4/6 address.
  */
 static int mptcp_parse_gateway_ipv4(char * gateways)
 {
@@ -259,22 +254,22 @@ static int mptcp_parse_gateway_ipv4(char * gateways)
 
 	memset(mptcp_gws, 0, sizeof(struct mptcp_gw_list));
 
-	/*
-	 * A TMP string is used since inet_pton needs a null terminated string but
+	/* A TMP string is used since inet_pton needs a null terminated string but
 	 * we do not want to modify the sysctl for obvious reasons.
-	 * i will iterate over the SYSCTL string, j will iterate over the temporary string where
-	 * each IP is copied into, k will iterate over the IPs in each list.
+	 * i will iterate over the SYSCTL string, j will iterate over the
+	 * temporary string where each IP is copied into, k will iterate over the
+	 * IPs in each list.
 	 */
 	for (i = j = k = 0; i < MPTCP_GW_SYSCTL_MAX_LEN && k < MPTCP_GW_MAX_LISTS; ++i) {
 		if (gateways[i] == '-' || gateways[i] == ',' || gateways[i] == '\0') {
-			/*
-			 * If the temp IP is empty and the current list is empty, we are done.
+			/* If the temp IP is empty and the current list is empty, we are
+			 * done.
 			 */
 			if (j == 0 && mptcp_gws->len[k] == 0)
 				break;
 
-			/*
-			 * Terminate the temp IP string, then if it is non-empty parse the IP and copy it.
+			/* Terminate the temp IP string, then if it is non-empty parse the
+			 * IP and copy it.
 			 */
 			tmp_string[j] = '\0';
 			if (j > 0) {
@@ -292,9 +287,9 @@ static int mptcp_parse_gateway_ipv4(char * gateways)
 					mptcp_gws->len[k]++;
 					j = 0;
 					tmp_string[j] = '\0';
-					/*
-					 * Since we can't impose a limit to what the user can input, make sure
-					 * there are not too many IPs in the SYSCTL string.
+					/* Since we can't impose a limit to what the user can
+					 * input, make sure there are not too many IPs in the
+					 * SYSCTL string.
 					 */
 					if (mptcp_gws->len[k] > MPTCP_GW_LIST_MAX_LEN) {
 						mptcp_debug("mptcp_parse_gateway_list too many members in list %i: max %i\n",
@@ -368,8 +363,7 @@ static int mptcp_get_avail_list_ipv6(struct sock *sk, unsigned char *opt)
 					memcmp(&mptcp_gws->list[i][0], &sk->sk_v6_daddr, 8)) {
 				list_free++;
 			} else {
-				/*
-				 * One socket using the list is enough to make it unusable.
+				/* One socket using the list is enough to make it unusable.
 				 */
 				break;
 			}
@@ -391,10 +385,9 @@ error:
 	return -1;
 }
 
-/*
- * The list of addresses is parsed each time a new connection is opened, to
- *  to make sure it's up to date. In case of error, all the lists are
- *  marked as unavailable.
+/* The list of addresses is parsed each time a new connection is opened, to
+ * to make sure it's up to date. In case of error, all the lists are
+ * marked as unavailable.
  */
 static void mptcp_v6_add_rh0(struct sock * sk, struct sockaddr_in6 *rem)
 {
@@ -406,8 +399,7 @@ static void mptcp_v6_add_rh0(struct sock * sk, struct sockaddr_in6 *rem)
 	opt = kmem_cache_alloc(opt_slub_v6, GFP_KERNEL);
 	if (!opt)
 		goto error;
-	/*
-	 * Read lock: multiple sockets can read RTH addresses at the same time,
+	/* Read lock: multiple sockets can read RTH addresses at the same time,
 	 * but writes are done in mutual exclusion.
 	 * Spin lock: must search for free list for one socket at a time, or
 	 * multiple sockets could take the same list.
@@ -417,8 +409,7 @@ static void mptcp_v6_add_rh0(struct sock * sk, struct sockaddr_in6 *rem)
 
 	i = mptcp_get_avail_list_ipv6(sk, (unsigned char *) opt);
 
-	/*
-	 * Execution enters here only if a free path is found.
+	/* Execution enters here only if a free path is found.
 	 */
 	if (i >= 0) {
 		memset(opt, 0, MPTCP_OPT_V6_SIZE);
@@ -426,18 +417,15 @@ static void mptcp_v6_add_rh0(struct sock * sk, struct sockaddr_in6 *rem)
 		opt[2] = 0; // Routing Type
 		opt[3] = 1; // Segments Left
 
-		/*
-		 * Insert dest address after 4 zero set bytes, following rfc2460
+		/* Insert dest address after 4 zero set bytes, following rfc2460
 		 */
 		memcpy(opt + 8, &rem->sin6_addr, sizeof(rem->sin6_addr));
-		/*
-		 * Change dest address to next hop address
+		/* Change dest address to next hop address
 		 */
 		memcpy(&rem->sin6_addr, &mptcp_gws6->list[i][0].s6_addr,
 				sizeof(mptcp_gws6->list[i][0].s6_addr));
 
-		/*
-		 * setsockopt must be inside the lock, otherwise another subflow could
+		/* setsockopt must be inside the lock, otherwise another subflow could
 		 * fail to see that we have taken a list.
 		 */
 		ret = ipv6_setsockopt(sk, IPPROTO_IPV6, IPV6_RTHDR, opt,
@@ -456,12 +444,11 @@ error:
 	return;
 }
 
-/*
- *  Parses gateways string for a list of paths to different
- *  gateways, and stores them for use with the Routing Header Type 0
- *  socket option. Each list must have "," separated addresses, and the lists
- *  themselves must be separated by "-". Returns -1 in case one or more of the
- *  addresses is not a valid ipv6 address.
+/* Parses gateways string for a list of paths to different
+ * gateways, and stores them for use with the Routing Header Type 0
+ * socket option. Each list must have "," separated addresses, and the lists
+ * themselves must be separated by "-". Returns -1 in case one or more of the
+ * addresses is not a valid ipv6 address.
  */
 static int mptcp_parse_gateway_ipv6(char * gateways)
 {
@@ -476,22 +463,22 @@ static int mptcp_parse_gateway_ipv6(char * gateways)
 
 	memset(mptcp_gws6, 0, sizeof(struct mptcp_gw_list6));
 
-	/*
-	 * A TMP string is used since inet_pton needs a null terminated string but
+	/* A TMP string is used since inet_pton needs a null terminated string but
 	 * we do not want to modify the sysctl for obvious reasons.
-	 * i will iterate over the SYSCTL string, j will iterate over the temporary string where
-	 * each IP is copied into, k will iterate over the IPs in each list.
+	 * i will iterate over the SYSCTL string, j will iterate over the
+	 * temporary string where each IP is copied into, k will iterate over the
+	 * IPs in each list.
 	 */
 	for (i = j = k = 0; i < MPTCP_GW6_SYSCTL_MAX_LEN && k < MPTCP_GW_MAX_LISTS; ++i) {
 		if (gateways[i] == '-' || gateways[i] == ',' || gateways[i] == '\0') {
-			/*
-			 * If the temp IP is empty and the current list is empty, we are done.
+			/* If the temp IP is empty and the current list is empty, we are
+			 * done.
 			 */
 			if (j == 0 && mptcp_gws6->len[k] == 0)
 				break;
 
-			/*
-			 * Terminate the temp IP string, then if it is non-empty parse the IP and copy it.
+			/* Terminate the temp IP string, then if it is non-empty parse the
+			 * IP and copy it.
 			 */
 			tmp_string[j] = '\0';
 
@@ -510,9 +497,9 @@ static int mptcp_parse_gateway_ipv6(char * gateways)
 					mptcp_gws6->len[k]++;
 					j = 0;
 					tmp_string[j] = '\0';
-					/*
-					 * Since we can't impose a limit to what the user can input, make sure
-					 * there are not too many IPs in the SYSCTL string.
+					/* Since we can't impose a limit to what the user can
+					 * input, make sure there are not too many IPs in the
+					 * SYSCTL string.
 					 */
 					if (mptcp_gws6->len[k] > MPTCP_GW_LIST_MAX_LEN6) {
 						mptcp_debug("mptcp_parse_gateway_list too many members in list %i: max %i\n",
@@ -649,8 +636,7 @@ static int binder_get_local_index(sa_family_t family, union inet_addr *addr,
 	return 0;
 }
 
-/*
- * Callback functions, executed when syctl mptcp.mptcp_gateways is updated.
+/* Callback functions, executed when syctl mptcp.mptcp_gateways is updated.
  * Inspired from proc_tcp_congestion_control().
  */
 static int proc_mptcp_gateways(ctl_table *ctl, int write,
