@@ -304,9 +304,8 @@ static int mptcp_parse_gateway_ipv4(char *gateways)
 				}
 			}
 
-			if (gateways[i] == '-' || gateways[i] == '\0') {
+			if (gateways[i] == '-' || gateways[i] == '\0')
 				++k;
-			}
 		} else {
 			tmp_string[j] = gateways[i];
 			++j;
