@@ -630,23 +630,31 @@ next_subflow:
 		if (meta_sk->sk_family == AF_INET ||
 		    mptcp_v6_is_v4_mapped(meta_sk)) {
 			struct mptcp_loc4 loc;
+			struct mptcp_rem4 rem;
 
 			loc.addr.s_addr = inet_sk(meta_sk)->inet_saddr;
 			loc.loc4_id = 0;
 			loc.low_prio = 0;
 
-			mptcp_init4_subsockets(meta_sk, &loc,
-				&mpcb->remaddr4[0]);
+			rem.addr.s_addr = inet_sk(meta_sk)->inet_daddr;
+			rem.port = inet_sk(meta_sk)->inet_dport;
+			rem.rem4_id = 0; /* Default 0 */
+
+			mptcp_init4_subsockets(meta_sk, &loc, &rem);
 		} else {
 #if IS_ENABLED(CONFIG_IPV6)
 			struct mptcp_loc6 loc;
+			struct mptcp_rem6 rem;
 
 			loc.addr = inet6_sk(meta_sk)->saddr;
 			loc.loc6_id = 0;
 			loc.low_prio = 0;
 
-			mptcp_init6_subsockets(meta_sk, &loc,
-				&mpcb->remaddr6[0]);
+			rem.addr = meta_sk->sk_v6_daddr;
+			rem.port = inet_sk(meta_sk)->inet_dport;
+			rem.rem6_id = 0; /* Default 0 */
+
+			mptcp_init6_subsockets(meta_sk, &loc, &rem);
 #endif
 		}
 		goto next_subflow;
@@ -658,7 +666,7 @@ exit:
 	sock_put(meta_sk);
 }
 
-static void binder_new_session(struct sock *meta_sk, int index)
+static void binder_new_session(struct sock *meta_sk)
 {
 	struct mptcp_cb *mpcb = tcp_sk(meta_sk)->mpcb;
 	struct binder_priv *fmp = (struct binder_priv *)&mpcb->mptcp_pm[0];
@@ -687,7 +695,7 @@ static void binder_create_subflows(struct sock *meta_sk)
 	}
 }
 
-static int binder_get_local_index(sa_family_t family, union inet_addr *addr,
+static int binder_get_local_id(sa_family_t family, union inet_addr *addr,
 				  struct net *net)
 {
 	return 0;
@@ -756,8 +764,7 @@ static int proc_mptcp_gateways6(ctl_table *ctl, int write,
 static struct mptcp_pm_ops binder __read_mostly = {
 	.new_session = binder_new_session,
 	.fully_established = binder_create_subflows,
-	.get_local_index = binder_get_local_index,
-	.get_local_id = binder_get_local_index,
+	.get_local_id = binder_get_local_id,
 	.init_subsocket_v4 = mptcp_v4_add_lsrr,
 #if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
 	.init_subsocket_v6 = mptcp_v6_add_rh0,
