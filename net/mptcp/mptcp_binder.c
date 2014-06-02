@@ -26,24 +26,11 @@
 #define MPTCP_GW_LIST_MAX_LEN	6
 #define MPTCP_GW_SYSCTL_MAX_LEN	(15 * MPTCP_GW_LIST_MAX_LEN *	\
 							MPTCP_GW_MAX_LISTS)
-#if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
-#define MPTCP_GW_LIST_MAX_LEN6	1
-#define MPTCP_GW6_SYSCTL_MAX_LEN	(40 * MPTCP_GW_LIST_MAX_LEN6 *	\
-							MPTCP_GW_MAX_LISTS)
-#define MPTCP_OPT_V6_SIZE 24
-#endif  /* CONFIG_MPTCP_BINDER_IPV6 */
 
 struct mptcp_gw_list {
 	struct in_addr list[MPTCP_GW_MAX_LISTS][MPTCP_GW_LIST_MAX_LEN];
 	u8 len[MPTCP_GW_MAX_LISTS];
 };
-
-#if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
-struct mptcp_gw_list6 {
-	struct in6_addr list[MPTCP_GW_MAX_LISTS][MPTCP_GW_LIST_MAX_LEN6];
-	u8 len[MPTCP_GW_MAX_LISTS];
-};
-#endif /* CONFIG_MPTCP_BINDER_IPV6 */
 
 struct binder_priv {
 	/* Worker struct for subflow establishment */
@@ -61,15 +48,6 @@ static int sysctl_mptcp_binder_ndiffports __read_mostly = 2;
 static char sysctl_mptcp_binder_gateways[MPTCP_GW_SYSCTL_MAX_LEN] __read_mostly;
 
 static struct kmem_cache *opt_slub_v4;
-
-#if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
-static struct mptcp_gw_list6 *mptcp_gws6;
-static rwlock_t mptcp_gws6_lock;
-
-static char sysctl_mptcp_binder_gateways6[MPTCP_GW6_SYSCTL_MAX_LEN] __read_mostly;
-
-static struct kmem_cache *opt_slub_v6;
-#endif /* CONFIG_MPTCP_BINDER_IPV6 */
 
 static int mptcp_get_avail_list_ipv4(struct sock *sk, unsigned char *opt)
 {
@@ -362,234 +340,6 @@ error:
 	return -1;
 }
 
-#if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
-static int mptcp_get_avail_list_ipv6(struct sock *sk, unsigned char *opt)
-{
-	int i, sock_num, list_free, opt_ret, opt_len;
-	struct tcp_sock *tp;
-
-	for (i = 0; i < MPTCP_GW_MAX_LISTS; ++i) {
-		if (mptcp_gws->len[i] == 0)
-			goto error;
-
-		mptcp_debug("mptcp_get_avail_list_ipv6: List %i\n", i);
-		sock_num = 0;
-		list_free = 0;
-
-		/* Loop through all sub-sockets in this connection */
-		tp = tcp_sk(sk)->mpcb->connection_list->mptcp->next;
-		while (tp != NULL) {
-			mptcp_debug("mptcp_get_avail_list_ipv6: Next "
-					"socket\n");
-			sock_num++;
-
-			/* Reset length and options buffer, then retrieve from
-			 * socket
-			 */
-			memset(opt, 0, MPTCP_OPT_V6_SIZE);
-			opt_ret = ipv6_getsockopt((struct sock *)tp,
-					IPPROTO_IPV6, IPV6_RTHDR, opt,
-					&opt_len);
-			if (opt_ret < 0) {
-				mptcp_debug(KERN_ERR "%s: MPTCP subsocket "
-					"getsockopt() IP_OPTIONS failed, "
-					"error %d\n", __func__, opt_ret);
-				goto error;
-			}
-
-			/* If socket has no options, it has no stake in this
-			 * list. The hop address will be in the socket dest
-			 * address, NOT in the routing header.
-			 */
-			if (opt_len == 0 ||
-					memcmp(&mptcp_gws->list[i][0],
-					&sk->sk_v6_daddr, 8)) {
-				list_free++;
-			} else {
-				/* One socket using the list is enough to make
-				 * it unusable.
-				 */
-				break;
-			}
-
-			tp = tp->mptcp->next;
-		}
-
-		/* Free list found if all sockets agree */
-		if (sock_num == list_free)
-			break;
-	}
-
-	if (i >= MPTCP_GW_MAX_LISTS)
-		goto error;
-
-	return i;
-
-error:
-	return -1;
-}
-
-/* The list of addresses is parsed each time a new connection is opened, to
- * to make sure it's up to date. In case of error, all the lists are
- * marked as unavailable.
- */
-static void mptcp_v6_add_rh0(struct sock *sk, struct sockaddr_in6 *rem)
-{
-	int i, ret;
-	char *opt = NULL;
-	struct tcp_sock *tp = tcp_sk(sk);
-	struct binder_priv *fmp = (struct binder_priv *)&tp->mpcb->mptcp_pm[0];
-
-	opt = kmem_cache_alloc(opt_slub_v6, GFP_KERNEL);
-	if (!opt)
-		goto error;
-	/* Read lock: multiple sockets can read RTH addresses at the same
-	 * time, but writes are done in mutual exclusion.
-	 * Spin lock: must search for free list for one socket at a time, or
-	 * multiple sockets could take the same list.
-	 */
-	read_lock(&mptcp_gws6_lock);
-	spin_lock(fmp->flow_lock);
-
-	i = mptcp_get_avail_list_ipv6(sk, (unsigned char *) opt);
-
-	/* Execution enters here only if a free path is found.
-	 */
-	if (i >= 0) {
-		memset(opt, 0, MPTCP_OPT_V6_SIZE);
-		opt[1] = 2; /* Hdr Ext Len, from rfc2460: 2x addresses */
-		opt[2] = 0; /* Routing Type */
-		opt[3] = 1; /* Segments Left */
-
-		/* Insert dest addr after 4 zero set bytes, following rfc2460
-		 */
-		memcpy(opt + 8, &rem->sin6_addr, sizeof(rem->sin6_addr));
-		/* Change dest address to next hop address
-		 */
-		memcpy(&rem->sin6_addr, &mptcp_gws6->list[i][0].s6_addr,
-				sizeof(mptcp_gws6->list[i][0].s6_addr));
-
-		/* setsockopt must be inside the lock, otherwise another
-		 * subflow could fail to see that we have taken a list.
-		 */
-		ret = ipv6_setsockopt(sk, IPPROTO_IPV6, IPV6_RTHDR, opt,
-				MPTCP_OPT_V6_SIZE);
-
-		if (ret < 0) {
-			mptcp_debug(KERN_ERR "%s: MPTCP subsock setsockopt()"
-				" IPV6_RTHDR failed, error %d\n",
-				__func__, ret);
-		}
-	}
-	spin_unlock(fmp->flow_lock);
-	read_unlock(&mptcp_gws6_lock);
-	kmem_cache_free(opt_slub_v6, opt);
-
-error:
-	return;
-}
-
-/* Parses gateways string for a list of paths to different
- * gateways, and stores them for use with the Routing Header Type 0
- * socket option. Each list must have "," separated addresses, and the lists
- * themselves must be separated by "-". Returns -1 in case one or more of the
- * addresses is not a valid ipv6 address.
- */
-static int mptcp_parse_gateway_ipv6(char *gateways)
-{
-	int i, j, k, ret;
-	char *tmp_string = NULL;
-	struct in6_addr tmp_addr;
-
-	tmp_string = kzalloc(40, GFP_KERNEL);
-	if (tmp_string == NULL)
-		return -ENOMEM;
-
-	write_lock(&mptcp_gws6_lock);
-
-	memset(mptcp_gws6, 0, sizeof(struct mptcp_gw_list6));
-
-	/* A TMP string is used since inet_pton needs a null terminated string
-	 * but we do not want to modify the sysctl for obvious reasons.
-	 * i will iterate over the SYSCTL string, j will iterate over the
-	 * temporary string where each IP is copied into, k will iterate over
-	 * the IPs in each list.
-	 */
-	for (i = j = k = 0; i < MPTCP_GW6_SYSCTL_MAX_LEN &&
-			k < MPTCP_GW_MAX_LISTS; ++i) {
-		if (gateways[i] == '-' || gateways[i] == ',' ||
-				gateways[i] == '\0') {
-			/* If the temp IP is empty and the current list is
-			 * empty, we are done.
-			 */
-			if (j == 0 && mptcp_gws6->len[k] == 0)
-				break;
-
-			/* Terminate the temp IP string, then if it is
-			 * non-empty parse the IP and copy it.
-			 */
-			tmp_string[j] = '\0';
-
-			if (j > 0) {
-				mptcp_debug("mptcp_parse_gateway_list tmp: "
-						"%s i: %d\n", tmp_string, i);
-
-				ret = in6_pton(tmp_string, strlen(tmp_string),
-						(u8 *) &tmp_addr.s6_addr,
-						'\0', NULL);
-
-				if (ret) {
-					mptcp_debug("mptcp_parse_gateway_list"
-						" ret: %d s_addr: %pI6\n",
-						ret, &tmp_addr.s6_addr);
-					memcpy(&mptcp_gws6->list[k][mptcp_gws6->len[k]].s6_addr,
-						&tmp_addr.s6_addr,
-						sizeof(tmp_addr.s6_addr));
-					mptcp_gws6->len[k]++;
-					j = 0;
-					tmp_string[j] = '\0';
-					/* Since we can't impose a limit to
-					 * what the user can input, make sure
-					 * there are not too many IPs in the
-					 * SYSCTL string.
-					 */
-					if (mptcp_gws6->len[k] > MPTCP_GW_LIST_MAX_LEN6) {
-						mptcp_debug("mptcp_parse_gateway_list"
-							" too many members in"
-							"list %i: max %i\n",
-							k,
-							MPTCP_GW_LIST_MAX_LEN);
-						goto error;
-					}
-				} else {
-					goto error;
-				}
-			}
-
-			if (gateways[i] == '-' || gateways[i] == '\0') {
-				++k;
-			}
-		} else {
-			tmp_string[j] = gateways[i];
-			++j;
-		}
-	}
-
-	sysctl_mptcp_binder_ndiffports = k+1;
-
-	write_unlock(&mptcp_gws6_lock);
-	kfree(tmp_string);
-	return 0;
-
-error:
-	memset(mptcp_gws6, 0, sizeof(struct mptcp_gw_list6));
-	memset(gateways, 0, sizeof(char) * MPTCP_GW6_SYSCTL_MAX_LEN);
-	write_unlock(&mptcp_gws6_lock);
-	kfree(tmp_string);
-	return -1;
-}
-#endif /* CONFIG_MPTCP_BINDER_IPV6 */
-
 /**
  * Create all new subflows, by doing calls to mptcp_initX_subsockets
  *
@@ -731,44 +481,11 @@ static int proc_mptcp_gateways(ctl_table *ctl, int write,
 	return ret;
 }
 
-#if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
-/* ipv6 version of the callback */
-static int proc_mptcp_gateways6(ctl_table *ctl, int write,
-				       void __user *buffer, size_t *lenp,
-				       loff_t *ppos)
-{
-	int ret;
-	ctl_table tbl = {
-		.maxlen = MPTCP_GW6_SYSCTL_MAX_LEN,
-	};
-
-	if (write) {
-		tbl.data = kzalloc(MPTCP_GW6_SYSCTL_MAX_LEN, GFP_KERNEL);
-		if (tbl.data == NULL)
-			return -1;
-		ret = proc_dostring(&tbl, write, buffer, lenp, ppos);
-		if (ret == 0) {
-			ret = mptcp_parse_gateway_ipv6(tbl.data);
-			memcpy(ctl->data, tbl.data, MPTCP_GW6_SYSCTL_MAX_LEN);
-		}
-		kfree(tbl.data);
-	} else {
-		ret = proc_dostring(ctl, write, buffer, lenp, ppos);
-	}
-
-
-	return ret;
-}
-#endif /* CONFIG_MPTCP_BINDER_IPV6 */
-
 static struct mptcp_pm_ops binder __read_mostly = {
 	.new_session = binder_new_session,
 	.fully_established = binder_create_subflows,
 	.get_local_id = binder_get_local_id,
 	.init_subsocket_v4 = mptcp_v4_add_lsrr,
-#if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
-	.init_subsocket_v6 = mptcp_v6_add_rh0,
-#endif /* CONFIG_MPTCP_BINDER_IPV6 */
 	.name = "binder",
 	.owner = THIS_MODULE,
 };
@@ -788,15 +505,6 @@ static struct ctl_table binder_table[] = {
 		.mode = 0644,
 		.proc_handler = &proc_mptcp_gateways
 	},
-#if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
-	{
-		.procname = "mptcp_binder_gateways6",
-		.data = &sysctl_mptcp_binder_gateways6,
-		.maxlen = sizeof(char) * MPTCP_GW6_SYSCTL_MAX_LEN,
-		.mode = 0644,
-		.proc_handler = &proc_mptcp_gateways6
-	},
-#endif /* CONFIG_MPTCP_BINDER_IPV6 */
 	{ }
 };
 
@@ -815,19 +523,6 @@ static int __init binder_register(void)
 			0, 0, NULL);
 	if (!opt_slub_v4)
 		return -ENOMEM;
-
-#if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
-	mptcp_gws6 = kzalloc(sizeof(struct mptcp_gw_list6), GFP_KERNEL);
-	if (!mptcp_gws6)
-		return -ENOMEM;
-
-	rwlock_init(&mptcp_gws6_lock);
-
-	opt_slub_v6 = kmem_cache_create("binder_v6", MPTCP_OPT_V6_SIZE,
-			0, 0, NULL);
-	if (!opt_slub_v6)
-		return -ENOMEM;
-#endif /* CONFIG_MPTCP_BINDER_IPV6 */
 
 	BUILD_BUG_ON(sizeof(struct binder_priv) > MPTCP_PM_SIZE);
 
@@ -854,11 +549,6 @@ static void binder_unregister(void)
 	kfree(mptcp_gws);
 	if (opt_slub_v4)
 		kmem_cache_destroy(opt_slub_v4);
-#if IS_ENABLED(CONFIG_MPTCP_BINDER_IPV6)
-	kfree(mptcp_gws6);
-	if (opt_slub_v6)
-		kmem_cache_destroy(opt_slub_v6);
-#endif /* CONFIG_MPTCP_BINDER_IPV6 */
 }
 
 module_init(binder_register);

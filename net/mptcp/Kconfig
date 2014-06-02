@@ -37,16 +37,7 @@ config MPTCP_BINDER
 	---help---
 	  This path-management module works like ndiffports, and adds the sysctl
 	  option to set the gateway (and/or path to) per each additional subflow
-	  via Loose Source Routing.
-
-config MPTCP_BINDER_IPV6
-	bool "EXPERIMENTAL: Binder IPv6 support via Routing Header 0"
-	depends on (MPTCP=y && IPV6=y &&  (MPTCP_BINDER=y || MPTCP_BINDER=m))
-	---help---
-	  WARNING: experimental. Support for MPTCP Binder IPv6 via Routing Header
-	  type 0 for research purposes. Enable ONLY after reverting commit id
-	  bb4dbf9e61d0801927e7df2569bb3dd8287ea301 AND if your network devices
-	  support IPv6 Routing Header Type 0.
+	  via Loose Source Routing (IPv4 only).
 
 choice
 	prompt "Default MPTCP Path-Manager"
