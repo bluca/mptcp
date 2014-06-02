@@ -52,7 +52,6 @@ static struct kmem_cache *opt_slub_v4;
 static int mptcp_get_avail_list_ipv4(struct sock *sk, unsigned char *opt)
 {
 	int i, j, sock_num, list_taken, opt_ret, opt_len;
-	struct tcp_sock *tp;
 	unsigned char *opt_ptr, *opt_end_ptr;
 
 	for (i = 0; i < MPTCP_GW_MAX_LISTS; ++i) {
@@ -64,8 +63,7 @@ static int mptcp_get_avail_list_ipv4(struct sock *sk, unsigned char *opt)
 		list_taken = 0;
 
 		/* Loop through all sub-sockets in this connection */
-		tp = tcp_sk(sk)->mpcb->connection_list->mptcp->next;
-		while (tp != NULL) {
+		mptcp_for_each_sk(tcp_sk(sk)->mpcb, sk) {
 			mptcp_debug("mptcp_get_avail_list_ipv4: Next sock\n");
 			sock_num++;
 
@@ -74,7 +72,7 @@ static int mptcp_get_avail_list_ipv4(struct sock *sk, unsigned char *opt)
 			 */
 			opt_len = MAX_IPOPTLEN;
 			memset(opt, 0, MAX_IPOPTLEN);
-			opt_ret = ip_getsockopt((struct sock *)tp, IPPROTO_IP,
+			opt_ret = ip_getsockopt(sk, IPPROTO_IP,
 				IP_OPTIONS, opt, &opt_len);
 			if (opt_ret < 0) {
 				mptcp_debug(KERN_ERR "%s: MPTCP subsocket "
@@ -156,8 +154,6 @@ static int mptcp_get_avail_list_ipv4(struct sock *sk, unsigned char *opt)
 			/* List is taken so move on */
 			if (list_taken)
 				break;
-
-			tp = tp->mptcp->next;
 		}
 
 		/* Free list found if not taken by a socket */
