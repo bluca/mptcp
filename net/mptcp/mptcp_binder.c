@@ -81,60 +81,55 @@ static int mptcp_get_avail_list_ipv4(struct sock *sk, unsigned char *opt)
 				goto error;
 			}
 
-			/* If socket has no options, it has no stake in this
-			 * list
-			 */
-			if (opt_len > 0) {
-				/* Iterate options buffer */
-				for (opt_ptr = &opt[0]; opt_ptr < &opt[opt_len]; opt_ptr++) {
-					if (*opt_ptr == IPOPT_LSRR) {
-						mptcp_debug("mptcp_get_avail_list_ipv4: LSRR options found\n");
+			/* If socket has no options, it has no stake in this list */
+			if (opt_len <= 0)
+				goto sock_finish;
 
-						/* Pointer to the 2nd to last address */
-						opt_end_ptr = opt_ptr+(*(opt_ptr+1))-4;
-
-						/* Addresses start 3 bytes
-						 * after type offset
-						 */
-						opt_ptr += 3;
-						j = 0;
-
-						/* Different length lists cannot be the same */
-						if ((opt_end_ptr-opt_ptr)/4 == mptcp_gws->len[i]) {
-							/* Iterate if we are still inside options list
-							 * and sysctl list
-							 */
-							while (opt_ptr < opt_end_ptr && j < mptcp_gws->len[i]) {
-								/* If there is a different
-								 * address, this list
-								 * must not be set on
-								 * this socket
-								 */
-								if (memcmp(&mptcp_gws->list[i][j], opt_ptr, 4))
-									break;
-
-								/* Jump 4 bytes
-								 * to next address
-								 */
-								opt_ptr += 4;
-								j++;
-							}
-
-							/* Reached the end without
-							 * a differing address,
-							 * lists are therefore
-							 * identical.
-							 */
-							if (j == mptcp_gws->len[i]) {
-								mptcp_debug("mptcp_get_avail_list_ipv4: List already  used\n");
-								list_taken = 1;
-							}
-						}
-						break;
-					}
+			/* Iterate options buffer */
+			for (opt_ptr = &opt[0]; opt_ptr < &opt[opt_len]; opt_ptr++) {
+				if (*opt_ptr == IPOPT_LSRR) {
+					mptcp_debug("mptcp_get_avail_list_ipv4: LSRR options found\n");
+					goto sock_lsrr;
 				}
 			}
+			goto sock_finish;
 
+sock_lsrr:
+			/* Pointer to the 2nd to last address */
+			opt_end_ptr = opt_ptr+(*(opt_ptr+1))-4;
+
+			/* Addresses start 3 bytes after type offset */
+			opt_ptr += 3;
+			j = 0;
+
+			/* Different length lists cannot be the same */
+			if ((opt_end_ptr-opt_ptr)/4 != mptcp_gws->len[i])
+				goto sock_finish;
+
+			/* Iterate if we are still inside options list
+			 * and sysctl list
+			 */
+			while (opt_ptr < opt_end_ptr && j < mptcp_gws->len[i]) {
+				/* If there is a different address, this list must
+				 * not be set on this socket
+				 */
+				if (memcmp(&mptcp_gws->list[i][j], opt_ptr, 4))
+					break;
+
+				/* Jump 4 bytes to next address */
+				opt_ptr += 4;
+				j++;
+			}
+
+			/* Reached the end without a differing address, lists
+			 * are therefore identical.
+			 */
+			if (j == mptcp_gws->len[i]) {
+				mptcp_debug("mptcp_get_avail_list_ipv4: List already used\n");
+				list_taken = 1;
+			}
+
+sock_finish:
 			/* List is taken so move on */
 			if (list_taken)
 				break;
