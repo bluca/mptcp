@@ -38,6 +38,7 @@ struct binder_priv {
 
 	struct mptcp_cb *mpcb;
 
+	/* Prevent multiple sub-sockets concurrently iterating over sub-sockets */
 	spinlock_t *flow_lock;
 };
 
@@ -75,10 +76,8 @@ static int mptcp_get_avail_list_ipv4(struct sock *sk, unsigned char *opt)
 			opt_ret = ip_getsockopt(sk, IPPROTO_IP,
 				IP_OPTIONS, opt, &opt_len);
 			if (opt_ret < 0) {
-				mptcp_debug(KERN_ERR "%s: MPTCP subsocket "
-						"getsockopt() IP_OPTIONS "
-						"failed, error %d\n",
-						__func__, opt_ret);
+				mptcp_debug(KERN_ERR "%s: MPTCP subsocket getsockopt() IP_OPTIONS failed, error %d\n",
+					    __func__, opt_ret);
 				goto error;
 			}
 
@@ -87,18 +86,11 @@ static int mptcp_get_avail_list_ipv4(struct sock *sk, unsigned char *opt)
 			 */
 			if (opt_len > 0) {
 				/* Iterate options buffer */
-				for (opt_ptr = &opt[0];
-						opt_ptr < &opt[opt_len];
-						opt_ptr++) {
-
+				for (opt_ptr = &opt[0]; opt_ptr < &opt[opt_len]; opt_ptr++) {
 					if (*opt_ptr == IPOPT_LSRR) {
-						mptcp_debug("mptcp_get_avail_list_ipv4:"
-							" LSRR options "
-							"found\n");
+						mptcp_debug("mptcp_get_avail_list_ipv4: LSRR options found\n");
 
-						/* Pointer to the 2nd to last
-						 * address
-						 */
+						/* Pointer to the 2nd to last address */
 						opt_end_ptr = opt_ptr+(*(opt_ptr+1))-4;
 
 						/* Addresses start 3 bytes
@@ -107,25 +99,18 @@ static int mptcp_get_avail_list_ipv4(struct sock *sk, unsigned char *opt)
 						opt_ptr += 3;
 						j = 0;
 
-						/* Different length lists
-						 cannot be the same */
-						if ((opt_end_ptr-opt_ptr)/4 ==
-							mptcp_gws->len[i]) {
-							/* Iterate if we are
-							 * still inside
-							 * options list
+						/* Different length lists cannot be the same */
+						if ((opt_end_ptr-opt_ptr)/4 == mptcp_gws->len[i]) {
+							/* Iterate if we are still inside options list
 							 * and sysctl list
 							 */
-							while (opt_ptr < opt_end_ptr &&
-									j < mptcp_gws->len[i]) {
+							while (opt_ptr < opt_end_ptr && j < mptcp_gws->len[i]) {
 								/* If there is a different
 								 * address, this list
 								 * must not be set on
 								 * this socket
 								 */
-								if (memcmp(&mptcp_gws->list[i][j],
-										opt_ptr,
-										4))
+								if (memcmp(&mptcp_gws->list[i][j], opt_ptr, 4))
 									break;
 
 								/* Jump 4 bytes
@@ -141,8 +126,7 @@ static int mptcp_get_avail_list_ipv4(struct sock *sk, unsigned char *opt)
 							 * identical.
 							 */
 							if (j == mptcp_gws->len[i]) {
-								mptcp_debug("mptcp_get_avail_list_ipv4:"
-									" List already used\n");
+								mptcp_debug("mptcp_get_avail_list_ipv4: List already  used\n");
 								list_taken = 1;
 							}
 						}
@@ -193,7 +177,7 @@ static void mptcp_v4_add_lsrr(struct sock *sk, struct in_addr rem)
 	read_lock(&mptcp_gws_lock);
 	spin_lock(fmp->flow_lock);
 
-	i = mptcp_get_avail_list_ipv4(sk, (unsigned char *) opt);
+	i = mptcp_get_avail_list_ipv4(sk, (unsigned char *)opt);
 
 	/* Execution enters here only if a free path is found.
 	 */
@@ -211,7 +195,7 @@ static void mptcp_v4_add_lsrr(struct sock *sk, struct in_addr rem)
 				sizeof(mptcp_gws->list[i][0].s_addr));
 		/* Final destination must be part of IP_OPTIONS parameter. */
 		memcpy(opt + 4 + (j * sizeof(rem.s_addr)), &rem.s_addr,
-				sizeof(rem.s_addr));
+		       sizeof(rem.s_addr));
 
 		/* setsockopt must be inside the lock, otherwise another
 		 * subflow could fail to see that we have taken a list.
@@ -221,8 +205,8 @@ static void mptcp_v4_add_lsrr(struct sock *sk, struct in_addr rem)
 				* (mptcp_gws->len[i] + 1));
 
 		if (ret < 0) {
-			mptcp_debug(KERN_ERR "%s: MPTCP subsock setsockopt() "
-			"IP_OPTIONS failed, error %d\n", __func__, ret);
+			mptcp_debug(KERN_ERR "%s: MPTCP subsock setsockopt() IP_OPTIONS failed, error %d\n",
+				    __func__, ret);
 		}
 	}
 
@@ -263,8 +247,7 @@ static int mptcp_parse_gateway_ipv4(char *gateways)
 	for (i = j = k = 0;
 			i < MPTCP_GW_SYSCTL_MAX_LEN && k < MPTCP_GW_MAX_LISTS;
 			++i) {
-		if (gateways[i] == '-' || gateways[i] == ',' ||
-				gateways[i] == '\0') {
+		if (gateways[i] == '-' || gateways[i] == ',' || gateways[i] == '\0') {
 			/* If the temp IP is empty and the current list is
 			 *  empty, we are done.
 			 */
@@ -276,22 +259,19 @@ static int mptcp_parse_gateway_ipv4(char *gateways)
 			 */
 			tmp_string[j] = '\0';
 			if (j > 0) {
-				mptcp_debug("mptcp_parse_gateway_list tmp: "
-						"%s i: %d\n", tmp_string, i);
+				mptcp_debug("mptcp_parse_gateway_list tmp: %s i: %d\n", tmp_string, i);
 
 				ret = in4_pton(tmp_string, strlen(tmp_string),
-						(u8 *) &tmp_addr.s_addr, '\0',
+						(u8 *)&tmp_addr.s_addr, '\0',
 						NULL);
 
 				if (ret) {
-					mptcp_debug("mptcp_parse_gateway_list"
-							" ret: %d s_addr:"
-							" %pI4\n",
-							ret,
-							&tmp_addr.s_addr);
+					mptcp_debug("mptcp_parse_gateway_list ret: %d s_addr: %pI4\n",
+						    ret,
+						    &tmp_addr.s_addr);
 					memcpy(&mptcp_gws->list[k][mptcp_gws->len[k]].s_addr,
-						&tmp_addr.s_addr,
-						sizeof(tmp_addr.s_addr));
+					       &tmp_addr.s_addr,
+					       sizeof(tmp_addr.s_addr));
 					mptcp_gws->len[k]++;
 					j = 0;
 					tmp_string[j] = '\0';
@@ -301,11 +281,9 @@ static int mptcp_parse_gateway_ipv4(char *gateways)
 					 * SYSCTL string.
 					 */
 					if (mptcp_gws->len[k] > MPTCP_GW_LIST_MAX_LEN) {
-						mptcp_debug("mptcp_parse_gateway_list"
-							" too many members in"
-							" list %i: max %i\n",
-							k,
-							MPTCP_GW_LIST_MAX_LEN);
+						mptcp_debug("mptcp_parse_gateway_list too many members in list %i: max %i\n",
+							    k,
+							    MPTCP_GW_LIST_MAX_LEN);
 						goto error;
 					}
 				} else {
@@ -509,7 +487,7 @@ struct ctl_table_header *mptcp_sysctl_binder;
 /* General initialization of MPTCP_PM */
 static int __init binder_register(void)
 {
-	mptcp_gws = kzalloc(sizeof(struct mptcp_gw_list), GFP_KERNEL);
+	mptcp_gws = kzalloc(sizeof(*mptcp_gws), GFP_KERNEL);
 	if (!mptcp_gws)
 		return -ENOMEM;
 
