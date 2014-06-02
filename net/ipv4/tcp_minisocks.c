@@ -290,11 +290,6 @@ void tcp_time_wait(struct sock *sk, int state, int timeo)
 	const struct tcp_sock *tp = tcp_sk(sk);
 	bool recycle_ok = false;
 
-	if (is_meta_sk(sk)) {
-		mptcp_update_tw_socks(tp, state);
-		goto tcp_done;
-	}
-
 	if (tcp_death_row.sysctl_tw_recycle && tp->rx_opt.ts_recent_stamp)
 		recycle_ok = tcp_remember_stamp(sk);
 
@@ -316,7 +311,7 @@ void tcp_time_wait(struct sock *sk, int state, int timeo)
 		tcptw->tw_ts_offset	= tp->tsoffset;
 
 		if (tp->mpc) {
-			if (mptcp_time_wait(sk, tcptw)) {
+			if (mptcp_init_tw_sock(sk, tcptw)) {
 				inet_twsk_free(tw);
 				goto exit;
 			}
@@ -383,7 +378,6 @@ void tcp_time_wait(struct sock *sk, int state, int timeo)
 
 exit:
 	tcp_update_metrics(sk);
-tcp_done:
 	tcp_done(sk);
 }
 
@@ -481,7 +475,7 @@ struct sock *tcp_create_openreq_child(struct sock *sk, struct request_sock *req,
 		 * set on the meta. But, keepalive is entirely handled at the
 		 * meta-socket, so let's keep it there.
 		 */
-		if (sock_flag(newsk, SOCK_KEEPOPEN) && is_meta_sk(sk))
+		if (sock_flag(newsk, SOCK_KEEPOPEN) && !tcp_sk(sk)->mpc)
 			inet_csk_reset_keepalive_timer(newsk,
 						       keepalive_time_when(newtp));
 
@@ -805,7 +799,16 @@ embryonic_reset:
 		tcp_reset(sk);
 	}
 	if (!fastopen) {
-		inet_csk_reqsk_queue_drop(sk, req, prev);
+		if (is_meta_sk(sk)) {
+			/* We want to avoid stoping the keepalive-timer and so
+			 * avoid ending up in inet_csk_reqsk_queue_removed ...
+			 */
+			inet_csk_reqsk_queue_unlink(sk, req, prev);
+			reqsk_queue_removed(&inet_csk(sk)->icsk_accept_queue, req);
+			reqsk_free(req);
+		} else {
+			inet_csk_reqsk_queue_drop(sk, req, prev);
+		}
 		NET_INC_STATS_BH(sock_net(sk), LINUX_MIB_EMBRYONICRSTS);
 	}
 	return NULL;

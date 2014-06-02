@@ -228,7 +228,8 @@ static int mptcp_rcv_state_process(struct sock *meta_sk, struct sock *sk,
 					 */
 					inet_csk_reset_keepalive_timer(meta_sk, tmo);
 				} else {
-					tcp_time_wait(meta_sk, TCP_FIN_WAIT2, tmo);
+					meta_tp->time_wait(meta_sk,
+							TCP_FIN_WAIT2, tmo);
 				}
 			}
 		}
@@ -960,7 +961,7 @@ static int mptcp_queue_skb(struct sock *sk)
 			mptcp_check_rcvseq_wrap(meta_tp, old_rcv_nxt);
 
 			if (copied_early)
-				tcp_cleanup_rbuf(meta_sk, tmp1->len);
+				meta_tp->cleanup_rbuf(meta_sk, tmp1->len);
 
 			if (tcp_hdr(tmp1)->fin && !mpcb->in_time_wait)
 				mptcp_fin(meta_sk);
@@ -988,7 +989,6 @@ next:
 	}
 
 	inet_csk(meta_sk)->icsk_ack.lrcvtime = tcp_time_stamp;
-	tp->mptcp->last_data_seq = tp->mptcp->map_data_seq;
 	mptcp_reset_mapping(tp);
 
 	return data_queued ? -1 : -2;
@@ -1047,7 +1047,7 @@ restart:
 exit:
 	if (tcp_sk(sk)->close_it) {
 		tcp_send_ack(sk);
-		tcp_time_wait(sk, TCP_TIME_WAIT, 0);
+		tcp_sk(sk)->time_wait(sk, TCP_TIME_WAIT, 0);
 	}
 
 	if (queued == -1 && !sock_flag(meta_sk, SOCK_DEAD))
@@ -1286,7 +1286,7 @@ void mptcp_fin(struct sock *meta_sk)
 	}
 
 	if (!sk || sk->sk_state == TCP_CLOSE)
-		sk = mptcp_select_ack_sock(meta_sk, 0);
+		sk = mptcp_select_ack_sock(meta_sk);
 
 	inet_csk_schedule_ack(sk);
 
@@ -1322,7 +1322,7 @@ void mptcp_fin(struct sock *meta_sk)
 	case TCP_FIN_WAIT2:
 		/* Received a FIN -- send ACK and enter TIME_WAIT. */
 		tcp_send_ack(sk);
-		tcp_time_wait(meta_sk, TCP_TIME_WAIT, 0);
+		meta_tp->time_wait(meta_sk, TCP_TIME_WAIT, 0);
 		break;
 	default:
 		/* Only TCP_LISTEN and TCP_CLOSE are left, in these
@@ -1530,19 +1530,6 @@ void mptcp_clean_rtx_infinite(struct sk_buff *skb, struct sock *sk)
 
 /**** static functions used by mptcp_parse_options */
 
-static inline int mptcp_rem_raddress(struct mptcp_cb *mpcb, u8 rem_id)
-{
-	if (mptcp_v4_rem_raddress(mpcb, rem_id) < 0) {
-#if IS_ENABLED(CONFIG_IPV6)
-		if (mptcp_v6_rem_raddress(mpcb, rem_id) < 0)
-			return -1;
-#else
-		return -1;
-#endif /* CONFIG_IPV6 */
-	}
-	return 0;
-}
-
 static void mptcp_send_reset_rem_id(const struct mptcp_cb *mpcb, u8 rem_id)
 {
 	struct sock *sk_it, *tmpsk;
@@ -1552,7 +1539,8 @@ static void mptcp_send_reset_rem_id(const struct mptcp_cb *mpcb, u8 rem_id)
 			mptcp_reinject_data(sk_it, 0);
 			sk_it->sk_err = ECONNRESET;
 			if (tcp_need_reset(sk_it->sk_state))
-				tcp_send_active_reset(sk_it, GFP_ATOMIC);
+				tcp_sk(sk_it)->send_active_reset(sk_it,
+								 GFP_ATOMIC);
 			mptcp_sub_force_close(sk_it);
 		}
 	}
@@ -1826,24 +1814,29 @@ int mptcp_check_rtt(const struct tcp_sock *tp, int time)
 static void mptcp_handle_add_addr(const unsigned char *ptr, struct sock *sk)
 {
 	struct mp_add_addr *mpadd = (struct mp_add_addr *)ptr;
+	struct mptcp_cb *mpcb = tcp_sk(sk)->mpcb;
+	__be16 port = 0;
+	union inet_addr addr;
+	sa_family_t family;
 
 	if (mpadd->ipver == 4) {
-		__be16 port = 0;
 		if (mpadd->len == MPTCP_SUB_LEN_ADD_ADDR4 + 2)
 			port  = mpadd->u.v4.port;
-
-		mptcp_v4_add_raddress(tcp_sk(sk)->mpcb, &mpadd->u.v4.addr, port,
-				      mpadd->addr_id);
+		family = AF_INET;
+		addr.in = mpadd->u.v4.addr;
 #if IS_ENABLED(CONFIG_IPV6)
 	} else if (mpadd->ipver == 6) {
-		__be16 port = 0;
 		if (mpadd->len == MPTCP_SUB_LEN_ADD_ADDR6 + 2)
 			port  = mpadd->u.v6.port;
-
-		mptcp_v6_add_raddress(tcp_sk(sk)->mpcb, &mpadd->u.v6.addr, port,
-				      mpadd->addr_id);
+		family = AF_INET6;
+		addr.in6 = mpadd->u.v6.addr;
 #endif /* CONFIG_IPV6 */
+	} else {
+		return;
 	}
+
+	if (mpcb->pm_ops->add_raddr)
+		mpcb->pm_ops->add_raddr(mpcb, &addr, family, port, mpadd->addr_id);
 }
 
 static void mptcp_handle_rem_addr(const unsigned char *ptr, struct sock *sk)
@@ -1851,11 +1844,14 @@ static void mptcp_handle_rem_addr(const unsigned char *ptr, struct sock *sk)
 	struct mp_remove_addr *mprem = (struct mp_remove_addr *)ptr;
 	int i;
 	u8 rem_id;
+	struct mptcp_cb *mpcb = tcp_sk(sk)->mpcb;
 
 	for (i = 0; i <= mprem->len - MPTCP_SUB_LEN_REMOVE_ADDR; i++) {
 		rem_id = (&mprem->addrs_id)[i];
-		if (!mptcp_rem_raddress(tcp_sk(sk)->mpcb, rem_id))
-			mptcp_send_reset_rem_id(tcp_sk(sk)->mpcb, rem_id);
+
+		if (mpcb->pm_ops->rem_raddr)
+			mpcb->pm_ops->rem_raddr(mpcb, rem_id);
+		mptcp_send_reset_rem_id(mpcb, rem_id);
 	}
 }
 
@@ -1965,7 +1961,7 @@ static inline int mptcp_mp_fail_rcvd(struct sock *sk, const struct tcphdr *th)
 			return 0;
 
 		if (tcp_need_reset(sk->sk_state))
-			tcp_send_active_reset(sk, GFP_ATOMIC);
+			tcp_sk(sk)->send_active_reset(sk, GFP_ATOMIC);
 
 		mptcp_for_each_sk_safe(mpcb, sk_it, tmpsk)
 			mptcp_sub_force_close(sk_it);
@@ -2007,7 +2003,7 @@ int mptcp_handle_options(struct sock *sk, const struct tcphdr *th, struct sk_buf
 	if (mptcp_is_data_seq(skb) && tp->mpcb->dss_csum &&
 	    !(TCP_SKB_CB(skb)->mptcp_flags & MPTCPHDR_DSS_CSUM)) {
 		if (tcp_need_reset(sk->sk_state))
-			tcp_send_active_reset(sk, GFP_ATOMIC);
+			tp->send_active_reset(sk, GFP_ATOMIC);
 
 		mptcp_sub_force_close(sk);
 		return 1;
@@ -2222,7 +2218,7 @@ void mptcp_init_buffer_space(struct sock *sk)
 		goto snd_buf;
 
 	/* Adding a new subflow to the rcv-buffer space. We make a simple
-	 * addition, to give some space to allow traffic on the new subflow. 
+	 * addition, to give some space to allow traffic on the new subflow.
 	 * Autotuning will increase it further later on.
 	 */
 	space = min(meta_sk->sk_rcvbuf + sk->sk_rcvbuf, sysctl_tcp_rmem[2]);
@@ -2237,7 +2233,7 @@ snd_buf:
 		return;
 
 	/* Adding a new subflow to the send-buffer space. We make a simple
-	 * addition, to give some space to allow traffic on the new subflow. 
+	 * addition, to give some space to allow traffic on the new subflow.
 	 * Autotuning will increase it further later on.
 	 */
 	space = min(meta_sk->sk_sndbuf + sk->sk_sndbuf, sysctl_tcp_wmem[2]);
