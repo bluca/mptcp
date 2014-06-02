@@ -491,14 +491,14 @@ static int __init binder_register(void)
 	opt_slub_v4 = kmem_cache_create("binder_v4", MAX_IPOPTLEN,
 			0, 0, NULL);
 	if (!opt_slub_v4)
-		return -ENOMEM;
+		goto opt_slub_v4_fail;
 
 	BUILD_BUG_ON(sizeof(struct binder_priv) > MPTCP_PM_SIZE);
 
 	mptcp_sysctl_binder = register_net_sysctl(&init_net, "net/mptcp",
 			binder_table);
 	if (!mptcp_sysctl_binder)
-		goto exit;
+		goto sysctl_fail;
 
 	if (mptcp_register_path_manager(&binder))
 		goto pm_failed;
@@ -507,7 +507,11 @@ static int __init binder_register(void)
 
 pm_failed:
 	unregister_net_sysctl_table(mptcp_sysctl_binder);
-exit:
+sysctl_fail:
+	kmem_cache_destroy(opt_slub_v4);
+opt_slub_v4_fail:
+	kfree(mptcp_gws);
+
 	return -1;
 }
 
