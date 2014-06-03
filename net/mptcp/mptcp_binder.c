@@ -3,10 +3,6 @@
 #include <net/mptcp.h>
 #include <net/mptcp_v4.h>
 
-#if IS_ENABLED(CONFIG_IPV6)
-#include <net/mptcp_v6.h>
-#endif
-
 #include <linux/route.h>
 #include <linux/inet.h>
 #include <linux/mroute.h>
@@ -16,10 +12,6 @@
 #include <net/xfrm.h>
 #include <net/compat.h>
 #include <linux/slab.h>
-#if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
-#include <net/transp_v6.h>
-#include <linux/ipv6.h>
-#endif
 
 /* fprint of the list, to look it up set it available on socket close */
 #define MPTCP_GW_MAX_LISTS	10
