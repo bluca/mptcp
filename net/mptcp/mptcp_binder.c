@@ -83,7 +83,7 @@ static int mptcp_get_avail_list_ipv4(struct sock *sk, unsigned char *opt)
 
 			/* If socket has no options, it has no stake in this list */
 			if (opt_len <= 0)
-				goto sock_finish;
+				continue;
 
 			/* Iterate options buffer */
 			for (opt_ptr = &opt[0]; opt_ptr < &opt[opt_len]; opt_ptr++) {
@@ -92,7 +92,7 @@ static int mptcp_get_avail_list_ipv4(struct sock *sk, unsigned char *opt)
 					goto sock_lsrr;
 				}
 			}
-			goto sock_finish;
+			continue;
 
 sock_lsrr:
 			/* Pointer to the 2nd to last address */
@@ -104,7 +104,7 @@ sock_lsrr:
 
 			/* Different length lists cannot be the same */
 			if ((opt_end_ptr-opt_ptr)/4 != mptcp_gws->len[i])
-				goto sock_finish;
+				continue;
 
 			/* Iterate if we are still inside options list
 			 * and sysctl list
@@ -129,7 +129,6 @@ sock_lsrr:
 				list_taken = 1;
 			}
 
-sock_finish:
 			/* List is taken so move on */
 			if (list_taken)
 				break;
