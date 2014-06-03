@@ -44,12 +44,10 @@ static rwlock_t mptcp_gws_lock;
 static int sysctl_mptcp_binder_ndiffports __read_mostly = 2;
 static char sysctl_mptcp_binder_gateways[MPTCP_GW_SYSCTL_MAX_LEN] __read_mostly;
 
-static struct kmem_cache *opt_slub_v4;
-
-static int mptcp_get_avail_list_ipv4(struct sock *sk, unsigned char *opt)
+static int mptcp_get_avail_list_ipv4(struct sock *sk)
 {
 	int i, j, sock_num, list_taken, opt_ret, opt_len;
-	unsigned char *opt_ptr, *opt_end_ptr;
+	unsigned char *opt_ptr, *opt_end_ptr, opt[MAX_IPOPTLEN];
 
 	for (i = 0; i < MPTCP_GW_MAX_LISTS; ++i) {
 		if (mptcp_gws->len[i] == 0)
@@ -152,13 +150,10 @@ error:
 static void mptcp_v4_add_lsrr(struct sock *sk, struct in_addr rem)
 {
 	int i, j, ret;
-	char *opt = NULL;
+	unsigned char opt[MAX_IPOPTLEN] = {0};
 	struct tcp_sock *tp = tcp_sk(sk);
 	struct binder_priv *fmp = (struct binder_priv *)&tp->mpcb->mptcp_pm[0];
 
-	opt = kmem_cache_alloc(opt_slub_v4, GFP_KERNEL);
-	if (!opt)
-		goto error;
 	/* Read lock: multiple sockets can read LSRR addresses at the same
 	 * time, but writes are done in mutual exclusion.
 	 * Spin lock: must search for free list for one socket at a time, or
@@ -167,12 +162,11 @@ static void mptcp_v4_add_lsrr(struct sock *sk, struct in_addr rem)
 	read_lock(&mptcp_gws_lock);
 	spin_lock(fmp->flow_lock);
 
-	i = mptcp_get_avail_list_ipv4(sk, (unsigned char *)opt);
+	i = mptcp_get_avail_list_ipv4(sk);
 
 	/* Execution enters here only if a free path is found.
 	 */
 	if (i >= 0) {
-		memset(opt, 0, MAX_IPOPTLEN);
 		opt[0] = IPOPT_NOP;
 		opt[1] = IPOPT_LSRR;
 		opt[2] = sizeof(mptcp_gws->list[i][0].s_addr) *
@@ -202,9 +196,7 @@ static void mptcp_v4_add_lsrr(struct sock *sk, struct in_addr rem)
 
 	spin_unlock(fmp->flow_lock);
 	read_unlock(&mptcp_gws_lock);
-	kmem_cache_free(opt_slub_v4, opt);
 
-error:
 	return;
 }
 
@@ -483,11 +475,6 @@ static int __init binder_register(void)
 
 	rwlock_init(&mptcp_gws_lock);
 
-	opt_slub_v4 = kmem_cache_create("binder_v4", MAX_IPOPTLEN,
-			0, 0, NULL);
-	if (!opt_slub_v4)
-		goto opt_slub_v4_fail;
-
 	BUILD_BUG_ON(sizeof(struct binder_priv) > MPTCP_PM_SIZE);
 
 	mptcp_sysctl_binder = register_net_sysctl(&init_net, "net/mptcp",
@@ -503,8 +490,6 @@ static int __init binder_register(void)
 pm_failed:
 	unregister_net_sysctl_table(mptcp_sysctl_binder);
 sysctl_fail:
-	kmem_cache_destroy(opt_slub_v4);
-opt_slub_v4_fail:
 	kfree(mptcp_gws);
 
 	return -1;
@@ -515,8 +500,6 @@ static void binder_unregister(void)
 	mptcp_unregister_path_manager(&binder);
 	unregister_net_sysctl_table(mptcp_sysctl_binder);
 	kfree(mptcp_gws);
-	if (opt_slub_v4)
-		kmem_cache_destroy(opt_slub_v4);
 }
 
 module_init(binder_register);
