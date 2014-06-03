@@ -17,7 +17,6 @@
 #include <net/compat.h>
 #include <linux/slab.h>
 
-/* fprint of the list, to look it up set it available on socket close */
 #define MPTCP_GW_MAX_LISTS	10
 #define MPTCP_GW_LIST_MAX_LEN	6
 #define MPTCP_GW_SYSCTL_MAX_LEN	(15 * MPTCP_GW_LIST_MAX_LEN *	\
@@ -34,14 +33,15 @@ struct binder_priv {
 
 	struct mptcp_cb *mpcb;
 
-	/* Prevent multiple sub-sockets concurrently iterating over sub-sockets */
+	/* Prevent multiple sub-sockets concurrently iterating over sockets */
 	spinlock_t *flow_lock;
 };
 
 static struct mptcp_gw_list *mptcp_gws;
 static rwlock_t mptcp_gws_lock;
 
-static int sysctl_mptcp_binder_ndiffports __read_mostly = 2;
+static int mptcp_binder_ndiffports __read_mostly = 2;
+
 static char sysctl_mptcp_binder_gateways[MPTCP_GW_SYSCTL_MAX_LEN] __read_mostly;
 
 static int mptcp_get_avail_list_ipv4(struct sock *sk)
@@ -281,7 +281,8 @@ static int mptcp_parse_gateway_ipv4(char *gateways)
 		}
 	}
 
-	sysctl_mptcp_binder_ndiffports = k+1;
+	/* Number of flows is number of gateway lists plus master flow */
+	mptcp_binder_ndiffports = k+1;
 
 	write_unlock(&mptcp_gws_lock);
 	kfree(tmp_string);
@@ -331,8 +332,8 @@ next_subflow:
 	    !tcp_sk(mpcb->master_sk)->mptcp->fully_established)
 		goto exit;
 
-	if (sysctl_mptcp_binder_ndiffports > iter &&
-	    sysctl_mptcp_binder_ndiffports > mpcb->cnt_subflows) {
+	if (mptcp_binder_ndiffports > iter &&
+	    mptcp_binder_ndiffports > mpcb->cnt_subflows) {
 		if (meta_sk->sk_family == AF_INET ||
 		    mptcp_v6_is_v4_mapped(meta_sk)) {
 			struct mptcp_loc4 loc;
@@ -447,13 +448,6 @@ static struct mptcp_pm_ops binder __read_mostly = {
 };
 
 static struct ctl_table binder_table[] = {
-	{
-		.procname = "mptcp_binder_ndiffports",
-		.data = &sysctl_mptcp_binder_ndiffports,
-		.maxlen = sizeof(int),
-		.mode = 0644,
-		.proc_handler = &proc_dointvec
-	},
 	{
 		.procname = "mptcp_binder_gateways",
 		.data = &sysctl_mptcp_binder_gateways,
