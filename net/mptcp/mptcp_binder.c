@@ -3,6 +3,10 @@
 #include <net/mptcp.h>
 #include <net/mptcp_v4.h>
 
+#if IS_ENABLED(CONFIG_IPV6)
+#include <net/mptcp_v6.h>
+#endif
+
 #include <linux/route.h>
 #include <linux/inet.h>
 #include <linux/mroute.h>
