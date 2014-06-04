@@ -46,7 +46,7 @@ static char sysctl_mptcp_binder_gateways[MPTCP_GW_SYSCTL_MAX_LEN] __read_mostly;
 
 static int mptcp_get_avail_list_ipv4(struct sock *sk)
 {
-	int i, j, sock_num, list_taken, opt_ret, opt_len;
+	int i, j, list_taken, opt_ret, opt_len;
 	unsigned char *opt_ptr, *opt_end_ptr, opt[MAX_IPOPTLEN];
 
 	for (i = 0; i < MPTCP_GW_MAX_LISTS; ++i) {
@@ -54,13 +54,11 @@ static int mptcp_get_avail_list_ipv4(struct sock *sk)
 			goto error;
 
 		mptcp_debug("mptcp_get_avail_list_ipv4: List %i\n", i);
-		sock_num = 0;
 		list_taken = 0;
 
 		/* Loop through all sub-sockets in this connection */
 		mptcp_for_each_sk(tcp_sk(sk)->mpcb, sk) {
 			mptcp_debug("mptcp_get_avail_list_ipv4: Next sock\n");
-			sock_num++;
 
 			/* Reset length and options buffer, then retrieve
 			 * from socket
