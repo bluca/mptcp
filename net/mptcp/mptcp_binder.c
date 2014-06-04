@@ -119,11 +119,8 @@ sock_lsrr:
 			if (j == mptcp_gws->len[i]) {
 				mptcp_debug("mptcp_get_avail_list_ipv4: List already used\n");
 				list_taken = 1;
-			}
-
-			/* List is taken so move on */
-			if (list_taken)
 				break;
+			}
 		}
 
 		/* Free list found if not taken by a socket */
