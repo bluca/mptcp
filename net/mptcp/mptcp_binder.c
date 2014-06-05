@@ -142,7 +142,7 @@ error:
  *  to make sure it's up to date. In case of error, all the lists are
  *  marked as unavailable and the subflow's fingerprint is set to 0.
  */
-static void mptcp_v4_add_lsrr(struct sock *sk, struct in_addr rem)
+static void mptcp_v4_add_lsrr(struct sock *sk, struct in_addr addr)
 {
 	int i, j, ret;
 	unsigned char opt[MAX_IPOPTLEN] = {0};
@@ -173,8 +173,8 @@ static void mptcp_v4_add_lsrr(struct sock *sk, struct in_addr rem)
 				&mptcp_gws->list[i][j].s_addr,
 				sizeof(mptcp_gws->list[i][0].s_addr));
 		/* Final destination must be part of IP_OPTIONS parameter. */
-		memcpy(opt + 4 + (j * sizeof(rem.s_addr)), &rem.s_addr,
-		       sizeof(rem.s_addr));
+		memcpy(opt + 4 + (j * sizeof(addr.s_addr)), &addr.s_addr,
+		       sizeof(addr.s_addr));
 
 		/* setsockopt must be inside the lock, otherwise another
 		 * subflow could fail to see that we have taken a list.
