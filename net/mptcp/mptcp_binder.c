@@ -3,10 +3,6 @@
 #include <net/mptcp.h>
 #include <net/mptcp_v4.h>
 
-#if IS_ENABLED(CONFIG_IPV6)
-#include <net/mptcp_v6.h>
-#endif
-
 #include <linux/route.h>
 #include <linux/inet.h>
 #include <linux/mroute.h>
@@ -329,36 +325,19 @@ next_subflow:
 
 	if (mptcp_binder_ndiffports > iter &&
 	    mptcp_binder_ndiffports > mpcb->cnt_subflows) {
-		if (meta_sk->sk_family == AF_INET ||
-		    mptcp_v6_is_v4_mapped(meta_sk)) {
-			struct mptcp_loc4 loc;
-			struct mptcp_rem4 rem;
+		struct mptcp_loc4 loc;
+		struct mptcp_rem4 rem;
 
-			loc.addr.s_addr = inet_sk(meta_sk)->inet_saddr;
-			loc.loc4_id = 0;
-			loc.low_prio = 0;
+		loc.addr.s_addr = inet_sk(meta_sk)->inet_saddr;
+		loc.loc4_id = 0;
+		loc.low_prio = 0;
 
-			rem.addr.s_addr = inet_sk(meta_sk)->inet_daddr;
-			rem.port = inet_sk(meta_sk)->inet_dport;
-			rem.rem4_id = 0; /* Default 0 */
+		rem.addr.s_addr = inet_sk(meta_sk)->inet_daddr;
+		rem.port = inet_sk(meta_sk)->inet_dport;
+		rem.rem4_id = 0; /* Default 0 */
 
-			mptcp_init4_subsockets(meta_sk, &loc, &rem);
-		} else {
-#if IS_ENABLED(CONFIG_IPV6)
-			struct mptcp_loc6 loc;
-			struct mptcp_rem6 rem;
+		mptcp_init4_subsockets(meta_sk, &loc, &rem);
 
-			loc.addr = inet6_sk(meta_sk)->saddr;
-			loc.loc6_id = 0;
-			loc.low_prio = 0;
-
-			rem.addr = meta_sk->sk_v6_daddr;
-			rem.port = inet_sk(meta_sk)->inet_dport;
-			rem.rem6_id = 0; /* Default 0 */
-
-			mptcp_init6_subsockets(meta_sk, &loc, &rem);
-#endif
-		}
 		goto next_subflow;
 	}
 
@@ -373,6 +352,14 @@ static void binder_new_session(struct sock *meta_sk)
 	struct mptcp_cb *mpcb = tcp_sk(meta_sk)->mpcb;
 	struct binder_priv *fmp = (struct binder_priv *)&mpcb->mptcp_pm[0];
 	static DEFINE_SPINLOCK(flow_lock);
+
+#if IS_ENABLED(CONFIG_IPV6)
+	if (meta_sk->sk_family == AF_INET6 &&
+	    !mptcp_v6_is_v4_mapped(meta_sk)) {
+			mptcp_fallback_default(mpcb);
+			return;
+	}
+#endif
 
 	/* Initialize workqueue-struct */
 	INIT_WORK(&fmp->subflow_work, create_subflow_worker);
