@@ -40,7 +40,7 @@ struct binder_priv {
 static struct mptcp_gw_list *mptcp_gws;
 static rwlock_t mptcp_gws_lock;
 
-static int mptcp_binder_ndiffports __read_mostly = 2;
+static int mptcp_binder_ndiffports __read_mostly = 1;
 
 static char sysctl_mptcp_binder_gateways[MPTCP_GW_SYSCTL_MAX_LEN] __read_mostly;
 
